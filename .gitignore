@@ -1,0 +1,66 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv environment files
+.uv/
+.python-version
+
+# Environment variables
+.env
+.env.*
+!*.example.env
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+wheels/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+pytestdebug.log
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.pytest_cache/
+
+# Type checker caches
+.mypy_cache/
+.pyre/
+.pytype/
+
+# Logs
+*.log
+logs/
+
+# IDEs and editors
+.vscode/
+.cursor/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# FastAPI / Uvicorn artifacts
+*.pid
+
+# Docker
+docker-compose.override.yml
