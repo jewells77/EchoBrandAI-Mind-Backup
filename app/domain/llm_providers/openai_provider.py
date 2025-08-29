@@ -127,3 +127,20 @@ class OpenAIProvider(BaseLLMProvider):
 
         # Create a new client with the updated configuration
         return ChatOpenAI(**config)
+
+    def get_info(self) -> Dict[str, Any]:
+        """
+        Get information about the OpenAI provider.
+
+        Returns:
+            Dict[str, Any]: Information about the provider including name, model, etc.
+        """
+        return {
+            "provider": "openai",
+            "model": self.model_name,
+            "temperature": self.temperature,
+            "max_tokens": (
+                self.max_tokens if self.max_tokens else "Not set (using model default)"
+            ),
+            "api_key_configured": bool(self.api_key),
+        }

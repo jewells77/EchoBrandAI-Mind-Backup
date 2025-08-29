@@ -1,6 +1,8 @@
 # path: app/config.py
+import os
 from pydantic_settings import BaseSettings
 from typing import Optional
+from dotenv import load_dotenv
 
 
 class Settings(BaseSettings):
@@ -13,7 +15,7 @@ class Settings(BaseSettings):
 
     # LLM Provider settings
     OPENAI_API_KEY: Optional[str] = None
-    OPENAI_MODEL_NAME: str = "gpt-4-turbo"
+    OPENAI_MODEL_NAME: str = os.getenv("OPENAI_MODEL_NAME", "gpt-4-turbo")
     OPENAI_TEMPERATURE: float = 0.7
     OPENAI_MAX_TOKENS: Optional[int] = None
 

@@ -18,7 +18,9 @@ async def test_openai():
     print(f"Using API key: {api_key[:5]}...{api_key[-5:] if len(api_key) > 10 else ''}")
 
     # Create ChatOpenAI instance
-    chat = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0.7, api_key=api_key)
+    chat = ChatOpenAI(
+        model_name=os.getenv("OPENAI_MODEL_NAME"), temperature=0.7, api_key=api_key
+    )
 
     # Test generation
     try:

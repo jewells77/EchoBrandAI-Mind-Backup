@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import Dict, Optional, Type
 
+from app.config import settings
 from app.domain.llm_providers.base import BaseLLMProvider
 from app.domain.llm_providers.openai_provider import OpenAIProvider
 
@@ -54,3 +55,19 @@ class LLMProviderFactory:
             provider_class: The provider class to register
         """
         cls._providers[provider_type] = provider_class
+
+
+def create_llm_provider(**kwargs) -> BaseLLMProvider:
+    """
+    Create an LLM provider based on application settings.
+
+    Args:
+        **kwargs: Additional parameters to pass to the provider constructor
+
+    Returns:
+        BaseLLMProvider: A configured LLM provider
+    """
+    # Default to OpenAI provider
+    provider_type = LLMProviderType.OPENAI
+
+    return LLMProviderFactory.get_provider(provider_type, **kwargs)

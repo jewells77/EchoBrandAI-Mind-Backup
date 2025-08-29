@@ -39,6 +39,16 @@ class BaseLLMProvider(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_info(self) -> Dict[str, Any]:
+        """
+        Get information about the LLM provider.
+
+        Returns:
+            Dict[str, Any]: Information about the provider including name, model, etc.
+        """
+        pass
+
     def _normalize_messages(
         self, messages: List[Union[Dict[str, str], BaseMessage]]
     ) -> List[BaseMessage]:
