@@ -28,6 +28,9 @@ class ContentGenerationRequest(BaseModel):
     guidelines: Optional[Dict[str, Any]] = Field(
         None, description="Content guidelines including tone, target audience, etc."
     )
+    thread_id: Optional[str] = Field(
+        None, description="Thread ID to continue a previous conversation"
+    )
 
 
 class ContentGenerationResponse(BaseModel):
@@ -45,4 +48,7 @@ class ContentGenerationResponse(BaseModel):
     final_content: Dict[str, Any] = Field(..., description="Final generated content")
     job_id: Optional[str] = Field(
         None, description="Job ID for asynchronous processing"
+    )
+    thread_id: Optional[str] = Field(
+        None, description="Thread ID for continuing the conversation"
     )

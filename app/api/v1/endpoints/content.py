@@ -100,27 +100,29 @@ async def generate_content_with_langgraph(
     3. Content generation
     4. Content refinement
 
-    Returns a complete result with all steps' outputs.
+    Returns a complete result with all steps' outputs and a thread_id for conversation continuity.
     """
     try:
         # Initialize the LangGraph workflow
         workflow = LangGraphContentWorkflow(llm_provider, scraper)
 
-        # Run the workflow
+        # Run the workflow with the thread_id if provided
         result = await workflow.run(
             brand_details=request.brand_details.model_dump(),
             content_request=request.content_request,
             competitors=request.competitors,
             guidelines=request.guidelines,
+            thread_id=request.thread_id,  # Pass the thread_id if provided
         )
 
-        # Return the results
+        # Return the results including the thread_id for continuity
         return ContentGenerationResponse(
             brand_profile=result.get("brand_profile", {}),
             competitor_insights=result.get("competitor_insights", {}),
             content_strategy=result.get("content_strategy", {}),
             final_content=result.get("final_content", {}),
             job_id=None,  # For synchronous processing
+            thread_id=result.get("thread_id"),  # Include thread_id in response
         )
     except Exception as e:
         raise HTTPException(

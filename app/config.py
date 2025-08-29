@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     # MongoDB settings
     MONGODB_URI: str = "mongodb://localhost:27017"
     MONGODB_DB_NAME: str = "ecobrandai"
+    MONGODB_CHECKPOINT_COLLECTION: str = "langgraph_checkpoints"
+    MONGODB_WRITES_COLLECTION: str = "langgraph_writes"
 
     # Vectorstore settings
     CHROMA_PERSIST_DIRECTORY: str = "./chroma_db"

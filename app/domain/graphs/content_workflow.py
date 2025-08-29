@@ -18,8 +18,7 @@ from langchain.schema import BaseMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 
-# from langgraph.checkpoint import MemorySaver
-from langgraph.checkpoint.memory import InMemorySaver
+from app.infrastructure.db.langgraph_memory import LangGraphMemoryHandler
 
 from app.domain.agents.brand_dna_analyzer import BrandDNAAnalyzerAgent
 from app.domain.agents.competitor_intelligence import CompetitorIntelligenceAgent
@@ -163,10 +162,10 @@ class LangGraphContentWorkflow:
         self.generator_agent = ContentGeneratorAgent(llm)
         self.refiner_agent = ContentRefinerAgent(llm)
 
-        # Build the graph
-        self.workflow = self._build_graph()
+        # Build the graph builder
+        self.graph_builder = self._build_graph()
 
-    def _build_graph(self) -> StateGraph:
+    def _build_graph(self):
         """Build the LangGraph workflow."""
         # Create the graph
         builder = StateGraph(WorkflowState)
@@ -197,14 +196,9 @@ class LangGraphContentWorkflow:
         # Set brand_analysis as the entry point directly
         builder.set_entry_point("brand_analysis")
 
-        # Add checkpointing with required configuration values
-        memory_saver = InMemorySaver()
-
-        # Compile the graph with only the checkpointer
-        graph = builder.compile(checkpointer=memory_saver)
-
-        # The configurable parameters are used during invocation, not compilation
-        return graph
+        # The graph will be compiled with the checkpointer during runtime
+        # Return the builder instead of the compiled graph
+        return builder
 
     # Node implementations
     async def _analyze_brand(self, state: WorkflowState) -> WorkflowState:
@@ -369,6 +363,7 @@ class LangGraphContentWorkflow:
         content_request: str,
         competitors: List[str] = None,
         guidelines: Dict[str, Any] = None,
+        thread_id: str = None,
     ) -> Dict[str, Any]:
         """
         Run the LangGraph workflow.
@@ -378,6 +373,7 @@ class LangGraphContentWorkflow:
             content_request: User's content request
             competitors: Optional list of competitor URLs (default: None)
             guidelines: Optional content guidelines (default: None)
+            thread_id: Optional thread ID for continuity (default: None)
 
         Returns:
             Dict containing all results from the workflow
@@ -395,20 +391,28 @@ class LangGraphContentWorkflow:
             "status": "running",
         }
 
-        # Generate a unique checkpoint ID based on content request
-        checkpoint_id = f"content_{str(uuid.uuid4())}"
+        # Generate a thread ID if not provided
+        thread_id = thread_id or f"content_{str(uuid.uuid4())}"
 
-        # Run the graph with required configurable keys
-        config = {
-            "configurable": {
-                "thread_id": "default_thread",
-                "checkpoint_ns": "content_workflow",
-                "checkpoint_id": checkpoint_id,
-            }
-        }
+        # Use MongoDB for memory persistence
+        async with LangGraphMemoryHandler.get_mongodb_memory(
+            thread_id=thread_id, namespace="content_workflow"
+        ) as memory_saver:
+            # Configure the workflow with MongoDB checkpointer
+            config = LangGraphMemoryHandler.get_config(
+                thread_id=thread_id,
+                namespace="content_workflow",
+            )
 
-        result = await self.workflow.ainvoke(
-            initial_state,
-            config=config,
-        )
-        return result
+            # Compile the workflow with the MongoDB checkpointer
+            workflow = self.graph_builder.compile(checkpointer=memory_saver)
+
+            # Run the workflow
+            result = await workflow.ainvoke(
+                initial_state,
+                config=config,
+            )
+
+            # Add thread_id to the result for continuity
+            result["thread_id"] = thread_id
+            return result
