@@ -29,7 +29,7 @@ class MockLLMProvider(BaseLLMProvider):
 
 
 @pytest.mark.asyncio
-@patch("app.domain.graphs.content_workflow.AsyncMongoDBSaver")
+@patch("app.domain.graphs.content_workflow.MongoDBSaver")
 async def test_langgraph_workflow_with_mongodb(mock_mongodb_saver):
     """Test the LangGraph workflow with MongoDB persistence."""
     # Mock MongoDB saver
@@ -47,12 +47,12 @@ async def test_langgraph_workflow_with_mongodb(mock_mongodb_saver):
 
         # Test input data
         brand_details = {"name": "EcoTest", "values": ["sustainability"]}
-        content_request = "Create a blog post about sustainability"
+        user_qurey = "Create a blog post about sustainability"
 
         # Run the workflow
         result = await workflow.run(
             brand_details=brand_details,
-            content_request=content_request,
+            user_qurey=user_qurey,
             competitors=["https://example.com"],
             guidelines={"keywords": ["green"]},
         )

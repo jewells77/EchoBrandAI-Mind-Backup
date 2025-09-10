@@ -1,9 +1,8 @@
 from typing import Dict, Any, Optional
 import uuid
-import asyncio
-from contextlib import asynccontextmanager
+import pymongo
 
-from langgraph.checkpoint.mongodb.aio import AsyncMongoDBSaver
+from langgraph.checkpoint.mongodb import MongoDBSaver
 from app.config import settings
 
 
@@ -11,8 +10,7 @@ class LangGraphMemoryHandler:
     """Handler for LangGraph memory operations using MongoDB."""
 
     @staticmethod
-    @asynccontextmanager
-    async def get_mongodb_memory(
+    def get_mongodb_memory(
         thread_id: Optional[str] = None,
         namespace: str = "default",
     ):
@@ -24,18 +22,19 @@ class LangGraphMemoryHandler:
                        If None, a random UUID will be generated.
             namespace: Namespace for the checkpoint. Defaults to 'default'.
 
-        Yields:
-            AsyncMongoDBSaver: An instance of the MongoDB memory saver.
+        Returns:
+            MongoDBSaver: An instance of the MongoDB memory saver.
         """
         thread_id = thread_id or f"thread_{uuid.uuid4()}"
 
-        async with AsyncMongoDBSaver.from_conn_string(
-            conn_string=settings.MONGODB_URI,
+        # Create MongoDB client and saver
+        client = pymongo.MongoClient(settings.MONGODB_URI)
+        return MongoDBSaver(
+            client=client,
             db_name=settings.MONGODB_DB_NAME,
             checkpoint_collection_name=settings.MONGODB_CHECKPOINT_COLLECTION,
             writes_collection_name=settings.MONGODB_WRITES_COLLECTION,
-        ) as saver:
-            yield saver
+        )
 
     @staticmethod
     def get_config(
@@ -60,7 +59,6 @@ class LangGraphMemoryHandler:
         config = {
             "configurable": {
                 "thread_id": thread_id,
-                "checkpoint_ns": namespace,
             }
         }
 

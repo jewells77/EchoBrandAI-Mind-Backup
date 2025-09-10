@@ -1,35 +1,37 @@
 from typing import List, Dict, Any
 import json
+from typing_extensions import TypedDict, Annotated
 from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import PydanticOutputParser
-from pydantic import BaseModel, Field
 
 from app.domain.llm_providers.base import BaseLLMProvider
 from app.infrastructure.scraping.playwright_client import PlaywrightScraper
 
 
-class CompetitorInsights(BaseModel):
+class CompetitorInsights(TypedDict):
     """Structured insights from competitor content analysis."""
 
-    competitor_insights: List[Dict[str, Any]] = Field(
-        description="List of insights from each competitor"
-    )
-    content_gaps: List[str] = Field(
-        description="Content opportunities the brand could exploit"
-    )
-    trending_topics: List[str] = Field(
-        description="Topics trending across competitor content"
-    )
-    content_types: List[str] = Field(
-        description="Content formats being used by competitors"
-    )
+    competitor_insights: Annotated[
+        List[Dict[str, Any]],
+        ...,
+        "List of insights from each competitor",
+    ]
+    content_gaps: Annotated[
+        List[str],
+        ...,
+        "Content opportunities the brand could exploit",
+    ]
+    trending_topics: Annotated[
+        List[str], ..., "Topics trending across competitor content"
+    ]
+    content_types: Annotated[
+        List[str], ..., "Content formats being used by competitors"
+    ]
 
 
 class CompetitorIntelligenceAgent:
     def __init__(self, llm: BaseLLMProvider, scraper=None):
         self.llm = llm
         self.scraper = scraper or PlaywrightScraper()
-        self.parser = PydanticOutputParser(pydantic_object=CompetitorInsights)
         self.prompt = ChatPromptTemplate.from_messages(
             [
                 (
@@ -43,7 +45,6 @@ Your task is to analyze the content provided from competitor websites and:
 4. Note the content types/formats being used
 
 Return your analysis as a structured JSON object.
-{format_instructions}
 """,
                 ),
                 (
@@ -140,31 +141,11 @@ Analyze this content and provide structured insights.""",
 
         formatted_content = "\n\n---\n\n".join(competitor_content)
 
-        # Step 3: Format prompt with the scraped content
-        formatted_prompt = self.prompt.format_messages(
-            competitor_content=formatted_content,
-            format_instructions=self.parser.get_format_instructions(),
+        result = await self.llm.generate(
+            prompt=self.prompt,
+            input={
+                "competitor_content": formatted_content,
+            },
+            output_schema=CompetitorInsights,
         )
-
-        # Step 4: Get response from LLM
-        response = await self.llm.generate(formatted_prompt)
-
-        try:
-            # Parse the response into our Pydantic model
-            parsed_response = self.parser.parse(response.content)
-            # Convert to dict for return
-            return parsed_response.model_dump()
-        except Exception as e:
-            # Fallback in case parsing fails
-            return {
-                "competitor_insights": [
-                    {"url": link, "summary": "Could not analyze due to parsing error"}
-                    for link in competitor_links
-                ],
-                "content_gaps": [
-                    "Could not identify content gaps due to parsing error"
-                ],
-                "trending_topics": [],
-                "content_types": [],
-                "error": str(e),
-            }
+        return result

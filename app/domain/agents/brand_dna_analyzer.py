@@ -1,44 +1,47 @@
 from typing import List, Dict, Any
 import json
+from typing_extensions import TypedDict, Annotated
 
 from langchain.prompts import ChatPromptTemplate
-from langchain.schema import AIMessage, HumanMessage
-from langchain.output_parsers import PydanticOutputParser
-from pydantic import BaseModel, Field
 
 from app.domain.llm_providers.base import BaseLLMProvider
 
 
-class BrandPersonaProfile(BaseModel):
+class BrandPersonaProfile(TypedDict):
     """Brand persona profile with extracted tone, audience and positioning."""
 
-    brand_tone: str = Field(
-        description="The voice and emotional quality of the brand's communication"
-    )
-    target_audience: str = Field(
-        description="Detailed description of the ideal customer or audience"
-    )
-    unique_positioning: str = Field(
-        description="What makes this brand different from competitors"
-    )
-    keywords: List[str] = Field(
-        description="Key phrases that define the brand identity"
-    )
-    visual_elements: str = Field(
-        description="Recommended visual elements that align with brand identity"
-    )
+    brand_tone: Annotated[
+        str,
+        ...,
+        "The voice and emotional quality of the brand's communication",
+    ]
+    target_audience: Annotated[
+        str,
+        ...,
+        "Detailed description of the ideal customer or audience",
+    ]
+    unique_positioning: Annotated[
+        str,
+        ...,
+        "What makes this brand different from competitors",
+    ]
+    keywords: Annotated[List[str], ..., "Key phrases that define the brand identity"]
+    visual_elements: Annotated[
+        str,
+        ...,
+        "Recommended visual elements that align with brand identity",
+    ]
 
 
 class BrandDNAAnalyzerAgent:
     def __init__(self, llm: BaseLLMProvider):
         self.llm = llm
-        self.parser = PydanticOutputParser(pydantic_object=BrandPersonaProfile)
         self.prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
                     """You are a brand analyst expert who extracts the core DNA of a brand. 
-Analyze the provided brand details and competitor information to identify:
+Analyze the provided brand details to identify:
 
 1. Brand tone - The voice and emotional quality of the brand's communication
 2. Target audience - Detailed description of the ideal customer
@@ -47,7 +50,6 @@ Analyze the provided brand details and competitor information to identify:
 5. Visual elements - Recommended visual elements that align with brand identity
 
 Return your analysis as a structured JSON object.
-{format_instructions}
 """,
                 ),
                 (
@@ -55,54 +57,27 @@ Return your analysis as a structured JSON object.
                     """Brand Details: 
 {brand_details}
 
-Competitors:
-{competitors}
-
 Extract the brand DNA and provide a structured profile.""",
                 ),
             ]
         )
 
-    async def analyze(
-        self, brand_details: Dict[str, Any], competitors: List[str] = None
-    ) -> Dict[str, Any]:
+    async def analyze(self, brand_details: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Analyze brand details and competitors to extract brand tone, target audience, and unique positioning.
+        Analyze brand details to extract brand tone, target audience, and unique positioning.
         Returns a structured brand persona profile as JSON.
 
         Args:
             brand_details: Dictionary containing brand information
-            competitors: Optional list of competitor URLs or names (default: None)
 
         Returns:
             Dictionary containing the brand persona profile
         """
-        # Format competitors list into a string
-        competitors = competitors or []
-        competitors_text = "\n".join([f"- {comp}" for comp in competitors])
-
-        # Format prompt with user inputs and parser instructions
-        formatted_prompt = self.prompt.format_messages(
-            brand_details=json.dumps(brand_details, indent=2),
-            competitors=competitors_text,
-            format_instructions=self.parser.get_format_instructions(),
+        result = await self.llm.generate(
+            prompt=self.prompt,
+            input={
+                "brand_details": json.dumps(brand_details, indent=2),
+            },
+            output_schema=BrandPersonaProfile,
         )
-
-        # Get response from LLM
-        response = await self.llm.generate(formatted_prompt)
-
-        try:
-            # Parse the response into our Pydantic model
-            parsed_response = self.parser.parse(response.content)
-            # Convert to dict for return
-            return parsed_response.model_dump()
-        except Exception as e:
-            # Fallback in case parsing fails
-            return {
-                "brand_tone": "Could not extract brand tone due to parsing error",
-                "target_audience": "Could not extract target audience due to parsing error",
-                "unique_positioning": "Could not extract unique positioning due to parsing error",
-                "keywords": [],
-                "visual_elements": "Could not extract visual elements due to parsing error",
-                "error": str(e),
-            }
+        return result

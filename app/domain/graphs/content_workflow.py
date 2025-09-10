@@ -25,6 +25,8 @@ from app.domain.agents.competitor_intelligence import CompetitorIntelligenceAgen
 from app.domain.agents.content_strategist import ContentStrategistAgent
 from app.domain.agents.content_generator import ContentGeneratorAgent
 from app.domain.agents.content_refiner import ContentRefinerAgent
+from app.domain.agents.final_output import FinalOutputAgent
+from app.domain.agents.conversational_agent import ConversationalAgent
 from app.domain.llm_providers.base import BaseLLMProvider
 from app.infrastructure.scraping.playwright_client import PlaywrightScraper
 
@@ -36,7 +38,7 @@ class WorkflowState(TypedDict):
     # Inputs
     brand_details: Dict[str, Any]
     competitors_summary: NotRequired[Dict[str, Any]]  # Pre-analyzed competitor data
-    content_request: str
+    user_qurey: str
     guidelines: Dict[str, Any]  # Can be empty
 
     # Process state
@@ -56,111 +58,10 @@ class WorkflowState(TypedDict):
     content_strategy: NotRequired[Dict[str, Any]]
     content_draft: NotRequired[Dict[str, Any]]
     final_content: NotRequired[Dict[str, Any]]
+    final_output: NotRequired[Dict[str, Any]]
 
     # Error handling
     error: NotRequired[str]
-
-
-class ContentCreationWorkflow:
-    """Sequential workflow implementation for content creation."""
-
-    def __init__(self, llm: BaseLLMProvider, scraper=None):
-        self.llm = llm
-        self.scraper = scraper or PlaywrightScraper()
-        self.brand_agent = BrandDNAAnalyzerAgent(llm)
-        self.competitor_agent = CompetitorIntelligenceAgent(llm, scraper)
-        self.strategist_agent = ContentStrategistAgent(llm)
-        self.generator_agent = ContentGeneratorAgent(llm)
-        self.refiner_agent = ContentRefinerAgent(llm)
-
-    async def run(
-        self,
-        brand_details: Dict[str, Any],
-        content_request: str,
-        competitors_summary: Dict[str, Any] = None,
-        guidelines: Dict[str, Any] = None,
-        thread_id: str = None,
-    ) -> Dict[str, Any]:
-        """
-        Orchestrate the multi-agent workflow for content creation.
-
-        Args:
-            brand_details: Dictionary containing brand information
-            content_request: Content request or brief
-            competitors_summary: Optional pre-analyzed competitor data (default: None)
-            guidelines: Optional content guidelines (default: None)
-            thread_id: Optional thread ID for continuity (default: None)
-
-        Returns:
-            Dictionary containing all outputs from the workflow
-        """
-        # Set defaults for optional parameters
-        guidelines = guidelines or {}
-        # Step 1: Analyze brand DNA - pass empty list for competitors since we're using summary
-        brand_profile = await self.brand_agent.analyze(brand_details, [])
-
-        # Step 2: Use competitor insights summary
-        if competitors_summary:
-            competitor_insights = competitors_summary
-        else:
-            # If no summary provided, create empty placeholder
-            competitor_insights = {
-                "competitor_insights": [],
-                "content_gaps": ["No competitor data provided for analysis"],
-                "trending_topics": [],
-                "content_types": [],
-            }
-
-        # Step 3: Suggest content strategy
-        strategy = await self.strategist_agent.suggest_strategy(
-            brand_profile, competitor_insights, content_request
-        )
-
-        # Step 4: Generate content draft
-        # For simplicity, use the first theme/format
-        theme = strategy.get("titles", [""])[0]
-        format_ = strategy.get("formats", [""])[0]
-
-        # Add brand tone and target audience from the brand profile
-        brand_tone = brand_profile.get("brand_tone", "")
-        target_audience = brand_profile.get("target_audience", "")
-
-        # Pass the original content request to extract word count limits
-        draft = await self.generator_agent.generate_content(
-            theme,
-            format_,
-            content_request=content_request,
-            brand_tone=brand_tone,
-            target_audience=target_audience,
-        )
-
-        # Step 5: Refine content
-        # Enhance guidelines with brand profile info
-        enhanced_guidelines = {**guidelines}
-        if "tone" not in enhanced_guidelines and brand_tone:
-            enhanced_guidelines["tone"] = brand_tone
-        if "target_audience" not in enhanced_guidelines and target_audience:
-            enhanced_guidelines["target_audience"] = target_audience
-        if "keywords" not in enhanced_guidelines and "keywords" in brand_profile:
-            enhanced_guidelines["keywords"] = brand_profile.get("keywords", [])
-
-        # Pass the content request to the refiner to extract word count limits
-        final_content = await self.refiner_agent.refine_content(
-            draft["draft"], enhanced_guidelines, content_request=content_request
-        )
-
-        # Generate a thread ID if not provided
-        thread_id = thread_id or f"content_{str(uuid.uuid4())}"
-
-        # Return a composite result with all the outputs
-        return {
-            "brand_profile": brand_profile,
-            "competitor_insights": competitor_insights,
-            "content_strategy": strategy,
-            "content_draft": draft,
-            "final_content": final_content,
-            "thread_id": thread_id,
-        }
 
 
 class LangGraphContentWorkflow:
@@ -179,6 +80,8 @@ class LangGraphContentWorkflow:
         self.strategist_agent = ContentStrategistAgent(llm)
         self.generator_agent = ContentGeneratorAgent(llm)
         self.refiner_agent = ContentRefinerAgent(llm)
+        self.final_output_agent = FinalOutputAgent(llm)
+        self.conversational_agent = ConversationalAgent(llm)
 
         # Build the graph builder
         self.graph_builder = self._build_graph()
@@ -189,13 +92,26 @@ class LangGraphContentWorkflow:
         builder = StateGraph(WorkflowState)
 
         # Define the nodes
+        builder.add_node("is_state_existing", self._is_state_existing)
         builder.add_node("brand_analysis", self._analyze_brand)
         builder.add_node("competitor_analysis", self._analyze_competitors)
         builder.add_node("strategy", self._create_strategy)
         builder.add_node("generation", self._generate_content)
         builder.add_node("refinement", self._refine_content)
+        builder.add_node("finalize", self._finalize_output)
+        builder.add_node("conversational_agent", self._conversational_agent)
 
         # Define the edges (workflow steps)
+        # Step 0: Decide route based on whether prior state-like data exists
+        builder.add_conditional_edges(
+            "is_state_existing",
+            self._state_router,
+            {
+                "conversational_agent": "conversational_agent",
+                "brand_analysis": "brand_analysis",
+            },
+        )
+
         # Step 1: Sequential flow - brand_analysis → competitor_analysis → strategy
         builder.add_edge("brand_analysis", "competitor_analysis")
         builder.add_edge("competitor_analysis", "strategy")
@@ -209,10 +125,12 @@ class LangGraphContentWorkflow:
         builder.add_edge("generation", "refinement")
 
         # Step 4: Refinement to end
-        builder.add_edge("refinement", END)
+        builder.add_edge("refinement", "finalize")
+        builder.add_edge("finalize", END)
+        builder.add_edge("conversational_agent", END)
 
-        # Set brand_analysis as the entry point directly
-        builder.set_entry_point("brand_analysis")
+        # Set is_state_existing as the entry point to choose the path
+        builder.set_entry_point("is_state_existing")
 
         # The graph will be compiled with the checkpointer during runtime
         # Return the builder instead of the compiled graph
@@ -223,7 +141,7 @@ class LangGraphContentWorkflow:
         """Analyze the brand DNA."""
         try:
             brand_profile = await self.brand_agent.analyze(
-                state["brand_details"], state["competitors"]
+                state["brand_details"],
             )
             return {
                 **state,
@@ -299,7 +217,7 @@ class LangGraphContentWorkflow:
             strategy = await self.strategist_agent.suggest_strategy(
                 state["brand_profile"],
                 state["competitor_insights"],
-                state["content_request"],
+                state["user_qurey"],
             )
             return {
                 **state,
@@ -321,15 +239,34 @@ class LangGraphContentWorkflow:
             return "end"
 
         strategy = state.get("content_strategy", {})
-        # Check if we have at least one title and format to proceed
+        # Proceed if we have at least one title
         titles = strategy.get("titles", [])
-        formats = strategy.get("formats", [])
 
-        if titles and formats:
+        if titles:
             return "generation"
         else:
             # End if we don't have necessary strategy outputs
             return "end"
+
+    def _state_router(self, state: WorkflowState) -> str:
+        """Route to conversational flow if prior state-like data exists, else start workflow."""
+        # Heuristic: if any downstream outputs are present, treat as existing state
+        has_prior_state = any(
+            key in state and bool(state.get(key))
+            for key in (
+                "final_output",
+                "final_content",
+                "content_draft",
+                "content_strategy",
+                "competitor_insights",
+                "brand_profile",
+            )
+        )
+        return "conversational_agent" if has_prior_state else "brand_analysis"
+
+    async def _is_state_existing(self, state: WorkflowState) -> WorkflowState:
+        """No-op node used before routing; returns state unchanged."""
+        return state
 
     async def _generate_content(self, state: WorkflowState) -> WorkflowState:
         """Generate draft content."""
@@ -337,19 +274,17 @@ class LangGraphContentWorkflow:
             strategy = state["content_strategy"]
             brand_profile = state["brand_profile"]
 
-            # Use the first title and format
+            # Use the first title
             theme = strategy.get("titles", [""])[0]
-            format_ = strategy.get("formats", [""])[0]
 
             # Add brand tone and target audience
             brand_tone = brand_profile.get("brand_tone", "")
             target_audience = brand_profile.get("target_audience", "")
 
-            # Use the content_request to extract word count limits
+            # Use the user_qurey to extract word count limits
             draft = await self.generator_agent.generate_content(
                 theme,
-                format_,
-                content_request=state["content_request"],
+                user_qurey=state["user_qurey"],
                 brand_tone=brand_tone,
                 target_audience=target_audience,
             )
@@ -386,11 +321,11 @@ class LangGraphContentWorkflow:
             if "keywords" not in enhanced_guidelines and "keywords" in brand_profile:
                 enhanced_guidelines["keywords"] = brand_profile.get("keywords", [])
 
-            # Pass the content_request to extract word count limits
+            # Pass the user_qurey to extract word count limits
             final_content = await self.refiner_agent.refine_content(
                 draft["draft"],
                 enhanced_guidelines,
-                content_request=state["content_request"],
+                user_qurey=state["user_qurey"],
             )
 
             return {
@@ -407,10 +342,56 @@ class LangGraphContentWorkflow:
                 "error": f"Content refinement failed: {str(e)}",
             }
 
+    async def _finalize_output(self, state: WorkflowState) -> WorkflowState:
+        """Produce structured final output (title + content)."""
+        try:
+            brand_profile = state.get("brand_profile", {})
+            content_strategy = state.get("content_strategy", {})
+            content_draft = state.get("content_draft", {})
+            final_content = state.get("final_content", {})
+
+            final_output = await self.final_output_agent.finalize(
+                brand_profile=brand_profile,
+                content_strategy=content_strategy,
+                content_draft=content_draft,
+                final_content=final_content,
+            )
+            return {
+                **state,
+                "final_output": final_output,
+                "step": "end",
+                "status": "completed",
+            }
+        except Exception as e:
+            return {
+                **state,
+                "step": "end",
+                "status": "error",
+                "error": f"Finalization failed: {str(e)}",
+            }
+
+    async def _conversational_agent(self, state: WorkflowState) -> WorkflowState:
+        """Conversational agent."""
+        user_message = state.get("user_qurey", {})
+        brand_profile = state.get("brand_profile", {})
+        competitor_insights = state.get("competitor_insights", {})
+        guidelines = state.get("guidelines", {})
+        final_output = state.get("final_output", {})
+        # messages = state.get("messages", [])
+        llm_response = await self.conversational_agent.respond(
+            user_message, brand_profile, competitor_insights, final_output, guidelines
+        )
+        return {
+            **state,
+            "final_output": {"content": llm_response},
+            "step": "end",
+            "status": "completed",
+        }
+
     async def run(
         self,
         brand_details: Dict[str, Any],
-        content_request: str,
+        user_qurey: str,
         competitors_summary: Dict[str, Any] = None,
         guidelines: Dict[str, Any] = None,
         thread_id: str = None,
@@ -420,7 +401,7 @@ class LangGraphContentWorkflow:
 
         Args:
             brand_details: Details about the brand
-            content_request: User's content request
+            user_qurey: User's content request
             competitors_summary: Optional pre-analyzed competitor data (default: None)
             guidelines: Optional content guidelines (default: None)
             thread_id: Optional thread ID for continuity (default: None)
@@ -433,8 +414,7 @@ class LangGraphContentWorkflow:
         # Initialize the state
         initial_state: WorkflowState = {
             "brand_details": brand_details,
-            "competitors": [],  # Empty list as we're using competitors_summary
-            "content_request": content_request,
+            "user_qurey": user_qurey,
             "guidelines": guidelines,
             "step": "brand_analysis",
             "status": "running",
@@ -448,24 +428,25 @@ class LangGraphContentWorkflow:
         thread_id = thread_id or f"content_{str(uuid.uuid4())}"
 
         # Use MongoDB for memory persistence
-        async with LangGraphMemoryHandler.get_mongodb_memory(
-            thread_id=thread_id, namespace="content_workflow"
-        ) as memory_saver:
-            # Configure the workflow with MongoDB checkpointer
-            config = LangGraphMemoryHandler.get_config(
-                thread_id=thread_id,
-                namespace="content_workflow",
-            )
+        memory_saver = LangGraphMemoryHandler.get_mongodb_memory(
+            thread_id=thread_id, namespace="default"
+        )
 
-            # Compile the workflow with the MongoDB checkpointer
-            workflow = self.graph_builder.compile(checkpointer=memory_saver)
+        # Configure the workflow with MongoDB checkpointer
+        config = LangGraphMemoryHandler.get_config(
+            thread_id=thread_id,
+            namespace="default",
+        )
 
-            # Run the workflow
-            result = await workflow.ainvoke(
-                initial_state,
-                config=config,
-            )
+        # Compile the workflow with the MongoDB checkpointer
+        workflow = self.graph_builder.compile(checkpointer=memory_saver)
 
-            # Add thread_id to the result for continuity
-            result["thread_id"] = thread_id
-            return result
+        # Run the workflow
+        result = await workflow.ainvoke(
+            initial_state,
+            config=config,
+        )
+
+        # Add thread_id to the result for continuity
+        result["thread_id"] = thread_id
+        return result

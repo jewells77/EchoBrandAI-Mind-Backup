@@ -1,7 +1,15 @@
 from typing import Dict, Any, List
+from typing_extensions import TypedDict, Annotated
 from langchain.prompts import ChatPromptTemplate
 
 from app.domain.llm_providers.base import BaseLLMProvider
+
+
+class RefinedContent(TypedDict):
+    """Structured refined content output."""
+
+    final_content: Annotated[str, ..., "Publication-ready refined content"]
+    character_count: Annotated[int, ..., "Character count of the final content"]
 
 
 class ContentRefinerAgent:
@@ -28,6 +36,12 @@ CRITICAL: You MUST preserve any word count limits from the original request. If 
 or similar, your refined output must strictly adhere to that limit without needing additional tracking or processing.
 
 The refined content should be publication-ready and maintain the original format while making these improvements.
+\n
+Default behavior:
+- Unless the original request clearly and explicitly asks for MULTIPLE pieces with a specific number (e.g., "3 posts", "two tweets", "a 5-part series"), ensure the output is EXACTLY ONE cohesive piece.
+- Do NOT split into multiple posts or sections like "Post 1", "Post 2" unless the request explicitly specifies a count.
+
+Return your output as a structured JSON object.
 """,
                 ),
                 (
@@ -45,7 +59,7 @@ Target Audience:
 {target_audience}
 
 Original Request:
-{content_request}
+{user_qurey}
 
 SEO Keywords (if applicable):
 {keywords}
@@ -57,7 +71,7 @@ from the original request, especially any word count limits.""",
         )
 
     async def refine_content(
-        self, draft_content: str, guidelines: Dict[str, Any], content_request: str = ""
+        self, draft_content: str, guidelines: Dict[str, Any], user_qurey: str = ""
     ) -> Dict[str, Any]:
         """
         Polish language, ensure brand consistency, add CTA.
@@ -70,7 +84,7 @@ from the original request, especially any word count limits.""",
                 - tone: Desired tone for the content
                 - target_audience: Target audience description
                 - keywords: SEO keywords to include (optional)
-            content_request: Original content request to understand user requirements
+            user_qurey: Original user query to understand user requirements
 
         Returns:
             Dict containing the final refined content
@@ -85,56 +99,30 @@ from the original request, especially any word count limits.""",
         if isinstance(keywords, list):
             keywords = ", ".join(keywords)
 
-        # Format prompt with inputs
-        formatted_prompt = self.refine_prompt.format_messages(
-            draft_content=draft_content,
-            brand_guidelines=brand_guidelines,
-            tone=tone,
-            target_audience=target_audience,
-            content_request=content_request or "No specific requirements provided",
-            keywords=keywords,
+        result = await self.llm.generate(
+            prompt=self.refine_prompt,
+            input={
+                "draft_content": draft_content,
+                "brand_guidelines": brand_guidelines,
+                "tone": tone,
+                "target_audience": target_audience,
+                "user_qurey": user_qurey or "No specific requirements provided",
+                "keywords": keywords,
+            },
+            output_schema=RefinedContent,
         )
 
-        # Get response from LLM
-        response = await self.llm.generate(formatted_prompt)
-
-        # Determine content type/format from the refined content
-        content_format = self._determine_content_format(response.content)
+        # Robustness: fall back if the LLM omits optional fields
+        final_content: str = result.get("final_content", "")
+        character_count: int = (
+            result.get("character_count")
+            if isinstance(result.get("character_count"), int)
+            else len(final_content)
+        )
 
         return {
-            "final_content": response.content,
+            "final_content": final_content,
             "metadata": {
-                "format": content_format,
-                "character_count": len(response.content),
+                "character_count": character_count,
             },
         }
-
-    def _determine_content_format(self, content: str) -> str:
-        """
-        Determine the format of the content based on structure and markers.
-
-        Args:
-            content: The content to analyze
-
-        Returns:
-            String indicating the detected format
-        """
-        # Simple format detection based on content markers
-        content_lower = content.lower()
-
-        if (
-            content.startswith("#")
-            or "<h1>" in content_lower
-            or "<h2>" in content_lower
-        ):
-            return "blog_post"
-        elif "subject:" in content_lower or "dear" in content_lower[:100]:
-            return "email"
-        elif "fade in:" in content_lower or "scene" in content_lower[:100]:
-            return "video_script"
-        elif len(content) < 500 and ("#" in content or "@" in content):
-            return "social_media_post"
-        elif "introduction" in content_lower and "conclusion" in content_lower:
-            return "article"
-        else:
-            return "general_content"

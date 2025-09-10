@@ -1,5 +1,6 @@
 import asyncio
-from typing import Any, AsyncGenerator, Dict, List, Optional, Union
+from typing import Any, AsyncGenerator, Dict, List, Optional, Union, Type
+from pydantic import BaseModel
 
 from langchain_openai import ChatOpenAI
 from langchain.callbacks.streaming_aiter import AsyncIteratorCallbackHandler
@@ -18,7 +19,7 @@ class OpenAIProvider(BaseLLMProvider):
         temperature: float = settings.OPENAI_TEMPERATURE,
         max_tokens: Optional[int] = settings.OPENAI_MAX_TOKENS,
         api_key: Optional[str] = settings.OPENAI_API_KEY,
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize the OpenAI provider.
@@ -43,29 +44,45 @@ class OpenAIProvider(BaseLLMProvider):
             max_tokens=self.max_tokens,
             api_key=self.api_key,
             streaming=False,
-            **self.kwargs
+            **self.kwargs,
         )
 
     async def generate(
-        self, messages: List[Union[Dict[str, str], BaseMessage]], **kwargs
-    ) -> AIMessage:
+        self,
+        *,
+        prompt: Any,
+        input: Optional[Dict[str, Any]] = None,
+        output_schema: Optional[Type[BaseModel]] = None,
+        **kwargs,
+    ) -> Any:
         """
-        Generate a response from OpenAI based on input messages.
+        Generate a response from OpenAI using prompt chaining.
 
         Args:
-            messages: List of messages in the conversation
-            **kwargs: Additional parameters to pass to the LLM
+            prompt: Runnable/prompt to chain with the client
+            input: Optional dict of variables for the prompt (defaults to {})
+            output_schema: Optional Pydantic model for structured output
+            **kwargs: Extra parameters for runtime client config
 
         Returns:
-            AIMessage: The generated response
+            Any: The generated response (AIMessage for plain chat, or structured type)
         """
-        normalized_messages = self._normalize_messages(messages)
+        if prompt is None:
+            raise ValueError("'prompt' is required for generate().")
 
-        # Apply any runtime configuration overrides
+        prompt_input = input or {}
+
+        # Apply runtime configuration (streaming, temperature, etc.)
         client = self._configure_client(streaming=False, **kwargs)
 
-        # Get response from OpenAI
-        response = await client.ainvoke(normalized_messages)
+        # Switch between normal and structured client
+        if output_schema:
+            llm = client.with_structured_output(output_schema)
+        else:
+            llm = client
+
+        chain = prompt | llm
+        response = await chain.ainvoke(prompt_input)
         return response
 
     async def stream(
@@ -127,6 +144,16 @@ class OpenAIProvider(BaseLLMProvider):
 
         # Create a new client with the updated configuration
         return ChatOpenAI(**config)
+
+    def with_structured_output(self, schema: Any, **kwargs) -> Any:
+        """
+        Return a runnable configured to produce structured output as per the given schema.
+
+        This leverages LangChain's ChatOpenAI.with_structured_output, which supports
+        TypedDict + Annotated and Pydantic models.
+        """
+        client = self._configure_client(streaming=False, **kwargs)
+        return client.with_structured_output(schema)
 
     def get_info(self) -> Dict[str, Any]:
         """

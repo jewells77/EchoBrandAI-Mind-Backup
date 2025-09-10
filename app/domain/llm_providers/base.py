@@ -8,18 +8,15 @@ class BaseLLMProvider(ABC):
     """Base class for LLM providers used in the application."""
 
     @abstractmethod
-    async def generate(
-        self, messages: List[Union[Dict[str, str], BaseMessage]], **kwargs
-    ) -> AIMessage:
+    async def generate(self, **kwargs) -> Any:
         """
-        Generate a response from the LLM based on input messages.
+        Generate a response from the LLM.
 
         Args:
-            messages: List of messages in the conversation
-            **kwargs: Additional parameters to pass to the LLM
+            **kwargs: Implementation-specific parameters (e.g., prompt, input, schema)
 
         Returns:
-            AIMessage: The generated response
+            Any: The generated response (could be AIMessage, dict, string, etc.)
         """
         pass
 
@@ -36,6 +33,20 @@ class BaseLLMProvider(ABC):
 
         Returns:
             AsyncGenerator[AIMessage, None]: Generator yielding chunks of the response
+        """
+        pass
+
+    @abstractmethod
+    def with_structured_output(self, schema: Any, **kwargs) -> Any:
+        """
+        Return an LLM runnable configured to produce structured output matching the given schema.
+
+        Args:
+            schema: A TypedDict, Pydantic model, or JSON schema-compatible type
+            **kwargs: Optional overrides for the underlying client configuration
+
+        Returns:
+            A runnable supporting .invoke/.ainvoke that yields the structured object
         """
         pass
 
@@ -71,7 +82,7 @@ class BaseLLMProvider(ABC):
                     normalized_messages.append(
                         HumanMessage(content=message.get("content", ""))
                     )
-                elif message.get("role") == "assistant":
+                elif message.get("role") == "ai":
                     normalized_messages.append(
                         AIMessage(content=message.get("content", ""))
                     )
