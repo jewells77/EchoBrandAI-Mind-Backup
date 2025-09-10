@@ -14,10 +14,12 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # LLM Provider settings
-    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY", "")
     OPENAI_MODEL_NAME: str = os.getenv("OPENAI_MODEL_NAME", "gpt-4-turbo")
     OPENAI_TEMPERATURE: float = 0.7
     OPENAI_MAX_TOKENS: Optional[int] = None
+    LANGCHAIN_API_KEY: Optional[str] = os.getenv("LANGCHAIN_API_KEY", "")
+    LANGCHAIN_PROJECT: Optional[str] = os.getenv("LANGCHAIN_PROJECT", "")
 
     # MongoDB settings
     MONGODB_URI: str = "mongodb://localhost:27017"

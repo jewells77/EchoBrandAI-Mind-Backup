@@ -7,28 +7,24 @@ from app.domain.llm_providers.base import BaseLLMProvider
 class ContentGeneratorAgent:
     def __init__(self, llm: BaseLLMProvider):
         self.llm = llm
-        self.prompt = ChatPromptTemplate.from_messages(
+        self.content_prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
                     """You are a professional content creator who generates high-quality, engaging content.
-Generate content based on the provided theme and format. Create content that is:
+You have exceptional reading comprehension and ALWAYS follow the exact requirements in the user's content request.
 
-- Engaging and tailored to the target audience
-- Structured appropriately for the specified format
-- On-brand with the tone and style provided
-- Factually accurate and well-researched
-- SEO-friendly with strategic keyword placement
+When generating content:
+- PRECISELY follow any word count limits mentioned in the original request
+- Use the appropriate format based on the request and context
+- Match the tone, style, and voice requested
+- Create engaging content tailored to the target audience
+- Ensure factual accuracy and strategic keyword placement
 
-Follow the specific format instructions:
-- For blog posts: Include title, headers, and body content with proper structure
-- For social media: Create a post with appropriate hashtags and call-to-action
-- For video scripts: Include opening hook, main sections, and closing call-to-action
-- For email campaigns: Include subject line, greeting, body, and closing
-- For product descriptions: Include features, benefits, and specifications
-- For infographics: Include title, section headers, and content for each section
+You are skilled at interpreting instructions directly from natural language requests and delivering exactly what was asked for.
+If a user asks for "50 word content" or "keep it under 100 words" or any similar instruction, you will honor that request precisely.
 
-Always consider the platform-specific best practices for the requested format.
+Your goal is to deliver content that follows the user's specifications WITHOUT needing additional processing or tracking.
 """,
                 ),
                 (
@@ -37,9 +33,10 @@ Always consider the platform-specific best practices for the requested format.
 Format: {format}
 Brand Tone: {brand_tone}
 Target Audience: {target_audience}
+Original Request: {content_request}
 Additional Context: {additional_context}
 
-Please generate a draft for this content.""",
+Please generate content that precisely follows the requirements in the original request.""",
                 ),
             ]
         )
@@ -48,16 +45,18 @@ Please generate a draft for this content.""",
         self,
         theme: str,
         format: str,
+        content_request: str = "",
         brand_tone: Optional[str] = None,
         target_audience: Optional[str] = None,
         additional_context: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Generate draft content based on theme and format.
+        Generate draft content based on theme, format, and the original content request.
 
         Args:
             theme: The content theme or topic
             format: The content format (blog, social post, video script, etc.)
+            content_request: Original content request containing any specific instructions
             brand_tone: Optional brand voice/tone to match
             target_audience: Optional target audience description
             additional_context: Optional additional context or requirements
@@ -66,11 +65,12 @@ Please generate a draft for this content.""",
             Dict containing the content draft
         """
         # Format prompt with inputs
-        formatted_prompt = self.prompt.format_messages(
+        formatted_prompt = self.content_prompt.format_messages(
             theme=theme,
             format=format,
             brand_tone=brand_tone or "Professional and engaging",
             target_audience=target_audience or "General audience",
+            content_request=content_request or "No specific requirements provided",
             additional_context=additional_context or "",
         )
 
@@ -79,5 +79,8 @@ Please generate a draft for this content.""",
 
         return {
             "draft": response.content,
-            "metadata": {"theme": theme, "format": format},
+            "metadata": {
+                "theme": theme,
+                "format": format,
+            },
         }

@@ -21,8 +21,9 @@ class ContentGenerationRequest(BaseModel):
     """Request model for content generation."""
 
     brand_details: BrandDetails = Field(..., description="Details about the brand")
-    competitors: Optional[List[str]] = Field(
-        default=[], description="List of competitor URLs or names"
+    competitors_summary: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Detailed summary of competitors (if available, avoids scraping)",
     )
     content_request: str = Field(..., description="Content request or brief")
     guidelines: Optional[Dict[str, Any]] = Field(

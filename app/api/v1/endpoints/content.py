@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from typing import Dict, Any
 
-from app.api.deps import get_llm_provider, get_scraper
+from app.api.deps import get_llm_provider
 from app.api.v1.schemas.content import (
     ContentGenerationRequest,
     ContentGenerationResponse,
@@ -11,7 +11,6 @@ from app.domain.graphs.content_workflow import (
     LangGraphContentWorkflow,
 )
 from app.domain.llm_providers.base import BaseLLMProvider
-from app.infrastructure.scraping.playwright_client import PlaywrightScraper
 
 
 router = APIRouter()
@@ -21,7 +20,6 @@ router = APIRouter()
 async def generate_content(
     request: ContentGenerationRequest,
     llm_provider: BaseLLMProvider = Depends(get_llm_provider),
-    scraper: PlaywrightScraper = Depends(get_scraper),
 ) -> ContentGenerationResponse:
     """
     Generate content based on brand details, competitors, and content request.
@@ -37,14 +35,15 @@ async def generate_content(
     """
     try:
         # Initialize the workflow (sequential for simplicity in the API)
-        workflow = ContentCreationWorkflow(llm_provider, scraper)
+        workflow = ContentCreationWorkflow(llm_provider)
 
         # Run the workflow
         result = await workflow.run(
             brand_details=request.brand_details.model_dump(),
             content_request=request.content_request,
-            competitors=request.competitors,
+            competitors_summary=request.competitors_summary,
             guidelines=request.guidelines,
+            thread_id=request.thread_id,  # Pass the thread_id if provided
         )
 
         # Return the results
@@ -54,6 +53,7 @@ async def generate_content(
             content_strategy=result["content_strategy"],
             final_content=result["final_content"],
             job_id=None,  # For synchronous processing
+            thread_id=result.get("thread_id"),  # Include thread_id if available
         )
     except Exception as e:
         raise HTTPException(
@@ -66,7 +66,6 @@ async def generate_content_async(
     request: ContentGenerationRequest,
     background_tasks: BackgroundTasks,
     llm_provider: BaseLLMProvider = Depends(get_llm_provider),
-    scraper: PlaywrightScraper = Depends(get_scraper),
 ) -> Dict[str, str]:
     """
     Generate content asynchronously using LangGraph workflow.
@@ -89,7 +88,6 @@ async def generate_content_async(
 async def generate_content_with_langgraph(
     request: ContentGenerationRequest,
     llm_provider: BaseLLMProvider = Depends(get_llm_provider),
-    scraper: PlaywrightScraper = Depends(get_scraper),
 ) -> ContentGenerationResponse:
     """
     Generate content using the LangGraph workflow.
@@ -104,13 +102,13 @@ async def generate_content_with_langgraph(
     """
     try:
         # Initialize the LangGraph workflow
-        workflow = LangGraphContentWorkflow(llm_provider, scraper)
+        workflow = LangGraphContentWorkflow(llm_provider)
 
         # Run the workflow with the thread_id if provided
         result = await workflow.run(
             brand_details=request.brand_details.model_dump(),
             content_request=request.content_request,
-            competitors=request.competitors,
+            competitors_summary=request.competitors_summary,
             guidelines=request.guidelines,
             thread_id=request.thread_id,  # Pass the thread_id if provided
         )

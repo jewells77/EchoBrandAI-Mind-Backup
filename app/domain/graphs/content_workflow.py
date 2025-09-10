@@ -35,7 +35,7 @@ class WorkflowState(TypedDict):
 
     # Inputs
     brand_details: Dict[str, Any]
-    competitors: List[str]  # Can be empty
+    competitors_summary: NotRequired[Dict[str, Any]]  # Pre-analyzed competitor data
     content_request: str
     guidelines: Dict[str, Any]  # Can be empty
 
@@ -77,8 +77,9 @@ class ContentCreationWorkflow:
         self,
         brand_details: Dict[str, Any],
         content_request: str,
-        competitors: List[str] = None,
+        competitors_summary: Dict[str, Any] = None,
         guidelines: Dict[str, Any] = None,
+        thread_id: str = None,
     ) -> Dict[str, Any]:
         """
         Orchestrate the multi-agent workflow for content creation.
@@ -86,22 +87,29 @@ class ContentCreationWorkflow:
         Args:
             brand_details: Dictionary containing brand information
             content_request: Content request or brief
-            competitors: Optional list of competitor URLs (default: None)
+            competitors_summary: Optional pre-analyzed competitor data (default: None)
             guidelines: Optional content guidelines (default: None)
+            thread_id: Optional thread ID for continuity (default: None)
 
         Returns:
             Dictionary containing all outputs from the workflow
         """
         # Set defaults for optional parameters
-        competitors = competitors or []
         guidelines = guidelines or {}
-        # Step 1: Analyze brand DNA
-        brand_profile = await self.brand_agent.analyze(brand_details, competitors)
+        # Step 1: Analyze brand DNA - pass empty list for competitors since we're using summary
+        brand_profile = await self.brand_agent.analyze(brand_details, [])
 
-        # Step 2: Fetch competitor insights (can be parallelized)
-        competitor_insights = await self.competitor_agent.summarize_competitors(
-            competitors
-        )
+        # Step 2: Use competitor insights summary
+        if competitors_summary:
+            competitor_insights = competitors_summary
+        else:
+            # If no summary provided, create empty placeholder
+            competitor_insights = {
+                "competitor_insights": [],
+                "content_gaps": ["No competitor data provided for analysis"],
+                "trending_topics": [],
+                "content_types": [],
+            }
 
         # Step 3: Suggest content strategy
         strategy = await self.strategist_agent.suggest_strategy(
@@ -117,8 +125,13 @@ class ContentCreationWorkflow:
         brand_tone = brand_profile.get("brand_tone", "")
         target_audience = brand_profile.get("target_audience", "")
 
+        # Pass the original content request to extract word count limits
         draft = await self.generator_agent.generate_content(
-            theme, format_, brand_tone=brand_tone, target_audience=target_audience
+            theme,
+            format_,
+            content_request=content_request,
+            brand_tone=brand_tone,
+            target_audience=target_audience,
         )
 
         # Step 5: Refine content
@@ -131,9 +144,13 @@ class ContentCreationWorkflow:
         if "keywords" not in enhanced_guidelines and "keywords" in brand_profile:
             enhanced_guidelines["keywords"] = brand_profile.get("keywords", [])
 
+        # Pass the content request to the refiner to extract word count limits
         final_content = await self.refiner_agent.refine_content(
-            draft["draft"], enhanced_guidelines
+            draft["draft"], enhanced_guidelines, content_request=content_request
         )
+
+        # Generate a thread ID if not provided
+        thread_id = thread_id or f"content_{str(uuid.uuid4())}"
 
         # Return a composite result with all the outputs
         return {
@@ -142,6 +159,7 @@ class ContentCreationWorkflow:
             "content_strategy": strategy,
             "content_draft": draft,
             "final_content": final_content,
+            "thread_id": thread_id,
         }
 
 
@@ -224,9 +242,33 @@ class LangGraphContentWorkflow:
     async def _analyze_competitors(self, state: WorkflowState) -> WorkflowState:
         """Analyze competitors."""
         try:
-            competitor_insights = await self.competitor_agent.summarize_competitors(
-                state["competitors"]
-            )
+            # Use provided summary if available, otherwise use empty placeholder
+            if "competitors_summary" in state and state["competitors_summary"]:
+                competitor_insights = state["competitors_summary"]
+            else:
+                # If no summary provided, create empty placeholder
+                competitor_insights = {
+                    "competitor_insights": [],
+                    "content_gaps": ["No competitor data provided for analysis"],
+                    "trending_topics": [],
+                    "content_types": [],
+                }
+
+            # Check if there was a scraping error but we have some fallback data
+            if competitor_insights.get("scraping_error"):
+                # Log the error but continue with the workflow using the limited data
+                # This is important - we don't want to fail the entire workflow just because
+                # we couldn't scrape competitors, especially if we have some data
+                return {
+                    **state,
+                    "competitor_insights": competitor_insights,
+                    "step": "competitor_analysis",
+                    "status": "completed",
+                    "competitor_scraping_warning": ", ".join(
+                        competitor_insights.get("error_details", ["Access restricted"])
+                    ),
+                }
+
             return {
                 **state,
                 "competitor_insights": competitor_insights,
@@ -303,8 +345,13 @@ class LangGraphContentWorkflow:
             brand_tone = brand_profile.get("brand_tone", "")
             target_audience = brand_profile.get("target_audience", "")
 
+            # Use the content_request to extract word count limits
             draft = await self.generator_agent.generate_content(
-                theme, format_, brand_tone=brand_tone, target_audience=target_audience
+                theme,
+                format_,
+                content_request=state["content_request"],
+                brand_tone=brand_tone,
+                target_audience=target_audience,
             )
 
             return {
@@ -339,8 +386,11 @@ class LangGraphContentWorkflow:
             if "keywords" not in enhanced_guidelines and "keywords" in brand_profile:
                 enhanced_guidelines["keywords"] = brand_profile.get("keywords", [])
 
+            # Pass the content_request to extract word count limits
             final_content = await self.refiner_agent.refine_content(
-                draft["draft"], enhanced_guidelines
+                draft["draft"],
+                enhanced_guidelines,
+                content_request=state["content_request"],
             )
 
             return {
@@ -361,7 +411,7 @@ class LangGraphContentWorkflow:
         self,
         brand_details: Dict[str, Any],
         content_request: str,
-        competitors: List[str] = None,
+        competitors_summary: Dict[str, Any] = None,
         guidelines: Dict[str, Any] = None,
         thread_id: str = None,
     ) -> Dict[str, Any]:
@@ -371,7 +421,7 @@ class LangGraphContentWorkflow:
         Args:
             brand_details: Details about the brand
             content_request: User's content request
-            competitors: Optional list of competitor URLs (default: None)
+            competitors_summary: Optional pre-analyzed competitor data (default: None)
             guidelines: Optional content guidelines (default: None)
             thread_id: Optional thread ID for continuity (default: None)
 
@@ -379,17 +429,20 @@ class LangGraphContentWorkflow:
             Dict containing all results from the workflow
         """
         # Set defaults for optional parameters
-        competitors = competitors or []
         guidelines = guidelines or {}
         # Initialize the state
         initial_state: WorkflowState = {
             "brand_details": brand_details,
-            "competitors": competitors,
+            "competitors": [],  # Empty list as we're using competitors_summary
             "content_request": content_request,
             "guidelines": guidelines,
             "step": "brand_analysis",
             "status": "running",
         }
+
+        # Add competitors_summary if provided
+        if competitors_summary:
+            initial_state["competitors_summary"] = competitors_summary
 
         # Generate a thread ID if not provided
         thread_id = thread_id or f"content_{str(uuid.uuid4())}"

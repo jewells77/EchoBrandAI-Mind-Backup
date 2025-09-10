@@ -7,13 +7,14 @@ from app.domain.llm_providers.base import BaseLLMProvider
 class ContentRefinerAgent:
     def __init__(self, llm: BaseLLMProvider):
         self.llm = llm
-        self.prompt = ChatPromptTemplate.from_messages(
+        self.refine_prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
                     """You are a professional content editor and refiner who specializes in polishing content to match brand guidelines.
-Your task is to take draft content and refine it by:
+You have exceptional reading comprehension and ALWAYS follow the exact requirements in the user's original content request.
 
+Your task is to take draft content and refine it by:
 1. Correcting grammar, spelling, and punctuation
 2. Improving flow, structure, and readability
 3. Ensuring consistent brand voice and tone
@@ -23,8 +24,10 @@ Your task is to take draft content and refine it by:
 7. Removing any redundancies or unnecessary sections
 8. Enhancing clarity and impact
 
-The refined content should be publication-ready and adhere strictly to the provided guidelines.
-Maintain the original format while making these improvements.
+CRITICAL: You MUST preserve any word count limits from the original request. If the user asked for "50 word content" 
+or similar, your refined output must strictly adhere to that limit without needing additional tracking or processing.
+
+The refined content should be publication-ready and maintain the original format while making these improvements.
 """,
                 ),
                 (
@@ -41,16 +44,20 @@ Tone Requirements:
 Target Audience:
 {target_audience}
 
+Original Request:
+{content_request}
+
 SEO Keywords (if applicable):
 {keywords}
 
-Please refine this content to be publication-ready.""",
+Please refine this content to be publication-ready while strictly adhering to all requirements 
+from the original request, especially any word count limits.""",
                 ),
             ]
         )
 
     async def refine_content(
-        self, draft_content: str, guidelines: Dict[str, Any]
+        self, draft_content: str, guidelines: Dict[str, Any], content_request: str = ""
     ) -> Dict[str, Any]:
         """
         Polish language, ensure brand consistency, add CTA.
@@ -63,6 +70,7 @@ Please refine this content to be publication-ready.""",
                 - tone: Desired tone for the content
                 - target_audience: Target audience description
                 - keywords: SEO keywords to include (optional)
+            content_request: Original content request to understand user requirements
 
         Returns:
             Dict containing the final refined content
@@ -78,11 +86,12 @@ Please refine this content to be publication-ready.""",
             keywords = ", ".join(keywords)
 
         # Format prompt with inputs
-        formatted_prompt = self.prompt.format_messages(
+        formatted_prompt = self.refine_prompt.format_messages(
             draft_content=draft_content,
             brand_guidelines=brand_guidelines,
             tone=tone,
             target_audience=target_audience,
+            content_request=content_request or "No specific requirements provided",
             keywords=keywords,
         )
 
@@ -96,7 +105,6 @@ Please refine this content to be publication-ready.""",
             "final_content": response.content,
             "metadata": {
                 "format": content_format,
-                "word_count": len(response.content.split()),
                 "character_count": len(response.content),
             },
         }

@@ -87,12 +87,48 @@ Analyze this content and provide structured insights.""",
         # Step 1: Scrape content from all competitor links
         scraped_results = await self.scraper.fetch_multiple(competitor_links)
 
-        # Step 2: Format the scraped content for the LLM
+        # Step 2: Check if we have any successful scrapes
+        successful_scrapes = [
+            r
+            for r in scraped_results
+            if not (
+                r.get("error")
+                or r.get("text_content", "").startswith("Failed to fetch")
+            )
+        ]
+
+        # If all scrapes failed, return a clear error
+        if not successful_scrapes and scraped_results:
+            error_messages = [
+                f"{r['url']}: {r.get('error', 'Unknown error')}"
+                for r in scraped_results
+            ]
+            return {
+                "competitor_insights": [
+                    {
+                        "url": r["url"],
+                        "name": r["url"].split("//")[-1].split("/")[0],
+                        "key_insights": [
+                            f"Failed to access: {r.get('error', 'Access restricted')}"
+                        ],
+                    }
+                    for r in scraped_results
+                ],
+                "content_gaps": [
+                    "Unable to identify content gaps due to access restrictions to competitor sites"
+                ],
+                "trending_topics": [],
+                "content_types": [],
+                "scraping_error": True,
+                "error_details": error_messages,
+            }
+
+        # Format content for LLM
         competitor_content = []
         for result in scraped_results:
             if "error" in result and result["error"]:
                 competitor_content.append(
-                    f"URL: {result['url']}\nError: {result['error']}"
+                    f"URL: {result['url']}\nError: {result['error']}\nNote: This competitor could not be analyzed due to access restrictions."
                 )
             else:
                 competitor_content.append(
