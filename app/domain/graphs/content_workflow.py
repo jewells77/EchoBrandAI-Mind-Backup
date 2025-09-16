@@ -14,9 +14,9 @@ from typing import (
 )
 from typing_extensions import NotRequired
 
-from langchain.schema import BaseMessage
+from langchain.schema import AIMessage, HumanMessage
 from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode
+from langgraph.graph.message import add_messages
 
 from app.infrastructure.db.langgraph_memory import LangGraphMemoryHandler
 
@@ -26,15 +26,16 @@ from app.domain.agents.content_strategist import ContentStrategistAgent
 from app.domain.agents.content_generator import ContentGeneratorAgent
 from app.domain.agents.content_refiner import ContentRefinerAgent
 from app.domain.agents.final_output import FinalOutputAgent
-from app.domain.agents.conversational_agent import ConversationalAgent
 from app.domain.llm_providers.base import BaseLLMProvider
 from app.infrastructure.scraping.playwright_client import PlaywrightScraper
+from app.api.v1.schemas.common import get_last_n_chats
 
 
 # Type definitions for the state
 class WorkflowState(TypedDict):
     """State of the content creation workflow."""
 
+    messages: Annotated[List[AIMessage | HumanMessage], add_messages]
     # Inputs
     brand_details: Dict[str, Any]
     competitors_summary: NotRequired[Dict[str, Any]]  # Pre-analyzed competitor data
@@ -58,7 +59,7 @@ class WorkflowState(TypedDict):
     content_strategy: NotRequired[Dict[str, Any]]
     content_draft: NotRequired[Dict[str, Any]]
     final_content: NotRequired[Dict[str, Any]]
-    final_output: NotRequired[Dict[str, Any]]
+    final_output: str
 
     # Error handling
     error: NotRequired[str]
@@ -81,7 +82,6 @@ class LangGraphContentWorkflow:
         self.generator_agent = ContentGeneratorAgent(llm)
         self.refiner_agent = ContentRefinerAgent(llm)
         self.final_output_agent = FinalOutputAgent(llm)
-        self.conversational_agent = ConversationalAgent(llm)
 
         # Build the graph builder
         self.graph_builder = self._build_graph()
@@ -99,7 +99,6 @@ class LangGraphContentWorkflow:
         builder.add_node("generation", self._generate_content)
         builder.add_node("refinement", self._refine_content)
         builder.add_node("finalize", self._finalize_output)
-        builder.add_node("conversational_agent", self._conversational_agent)
 
         # Define the edges (workflow steps)
         # Step 0: Decide route based on whether prior state-like data exists
@@ -107,7 +106,7 @@ class LangGraphContentWorkflow:
             "is_state_existing",
             self._state_router,
             {
-                "conversational_agent": "conversational_agent",
+                "finalize": "finalize",
                 "brand_analysis": "brand_analysis",
             },
         )
@@ -127,7 +126,6 @@ class LangGraphContentWorkflow:
         # Step 4: Refinement to end
         builder.add_edge("refinement", "finalize")
         builder.add_edge("finalize", END)
-        builder.add_edge("conversational_agent", END)
 
         # Set is_state_existing as the entry point to choose the path
         builder.set_entry_point("is_state_existing")
@@ -262,7 +260,7 @@ class LangGraphContentWorkflow:
                 "brand_profile",
             )
         )
-        return "conversational_agent" if has_prior_state else "brand_analysis"
+        return "finalize" if has_prior_state else "brand_analysis"
 
     async def _is_state_existing(self, state: WorkflowState) -> WorkflowState:
         """No-op node used before routing; returns state unchanged."""
@@ -343,47 +341,29 @@ class LangGraphContentWorkflow:
             }
 
     async def _finalize_output(self, state: WorkflowState) -> WorkflowState:
-        """Produce structured final output (title + content)."""
-        try:
-            brand_profile = state.get("brand_profile", {})
-            content_strategy = state.get("content_strategy", {})
-            content_draft = state.get("content_draft", {})
-            final_content = state.get("final_content", {})
-
-            final_output = await self.final_output_agent.finalize(
-                brand_profile=brand_profile,
-                content_strategy=content_strategy,
-                content_draft=content_draft,
-                final_content=final_content,
-            )
-            return {
-                **state,
-                "final_output": final_output,
-                "step": "end",
-                "status": "completed",
-            }
-        except Exception as e:
-            return {
-                **state,
-                "step": "end",
-                "status": "error",
-                "error": f"Finalization failed: {str(e)}",
-            }
-
-    async def _conversational_agent(self, state: WorkflowState) -> WorkflowState:
-        """Conversational agent."""
+        """finalize output agent."""
         user_message = state.get("user_qurey", {})
         brand_profile = state.get("brand_profile", {})
         competitor_insights = state.get("competitor_insights", {})
         guidelines = state.get("guidelines", {})
         final_output = state.get("final_output", {})
-        # messages = state.get("messages", [])
-        llm_response = await self.conversational_agent.respond(
-            user_message, brand_profile, competitor_insights, final_output, guidelines
+        messages = state.get("messages", [])
+        last_messages = get_last_n_chats(messages, n=15)
+
+        # Remove last user message to keep only conversation history
+        last_messages.pop()
+        llm_response = await self.final_output_agent.respond(
+            user_message,
+            brand_profile,
+            competitor_insights,
+            final_output,
+            guidelines,
+            last_messages,
         )
         return {
             **state,
-            "final_output": {"content": llm_response},
+            "final_output": llm_response,
+            "messages": [AIMessage(content=llm_response)],
             "step": "end",
             "status": "completed",
         }
@@ -416,6 +396,7 @@ class LangGraphContentWorkflow:
             "brand_details": brand_details,
             "user_qurey": user_qurey,
             "guidelines": guidelines,
+            "messages": [HumanMessage(content=user_qurey)],
             "step": "brand_analysis",
             "status": "running",
         }
@@ -446,7 +427,7 @@ class LangGraphContentWorkflow:
             initial_state,
             config=config,
         )
-
         # Add thread_id to the result for continuity
         result["thread_id"] = thread_id
+        result["message"] = user_qurey
         return result

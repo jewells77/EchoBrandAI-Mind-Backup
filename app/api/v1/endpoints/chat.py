@@ -36,7 +36,6 @@ async def chat(
                 raise HTTPException(
                     status_code=400, detail=result.get("error", "Unknown error")
                 )
-
             return ChatContinueResponse(
                 thread_id=result["thread_id"],
                 message=result.get("message", ""),
@@ -55,11 +54,11 @@ async def chat(
             competitors_summary=request.competitors_summary,
             guidelines=request.guidelines,
         )
-
-        return ChatInitResponse(
+        return ChatContinueResponse(
             thread_id=result["thread_id"],
-            content_strategy=result.get("content_strategy", {}),
-            final_output=result.get("final_output", {}),
+            message=result.get("message", ""),
+            status=result.get("status", "completed"),
+            final_output=result.get("final_output"),
         )
     except HTTPException:
         raise

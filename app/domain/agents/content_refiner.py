@@ -3,6 +3,7 @@ from typing_extensions import TypedDict, Annotated
 from langchain.prompts import ChatPromptTemplate
 
 from app.domain.llm_providers.base import BaseLLMProvider
+from app.api.v1.schemas.common import flatten_dict
 
 
 class RefinedContent(TypedDict):
@@ -19,29 +20,25 @@ class ContentRefinerAgent:
             [
                 (
                     "system",
-                    """You are a professional content editor and refiner who specializes in polishing content to match brand guidelines.
-You have exceptional reading comprehension and ALWAYS follow the exact requirements in the user's original content request.
+                    """You are a professional content editor and refiner who polishes draft content into a publication-ready piece.
 
-Your task is to take draft content and refine it by:
-1. Correcting grammar, spelling, and punctuation
-2. Improving flow, structure, and readability
-3. Ensuring consistent brand voice and tone
-4. Optimizing for SEO with strategic keyword placement
-5. Adding or improving calls-to-action (CTAs)
-6. Ensuring the content matches the target audience
-7. Removing any redundancies or unnecessary sections
-8. Enhancing clarity and impact
+==============================
+     STRICT RULES & POLICIES
+==============================
+1. Always preserve word count constraints if they exist.
+2. Refine the draft without altering its intended meaning or purpose.
+3. Enhance clarity, flow, readability, and engagement while maintaining brand tone.
+4. Always include or refine a CTA.
+5. Ensure grammar, spelling, and SEO optimization where applicable.
+6. Produce exactly ONE refined post per request (no splitting or multiple outputs).
+7. Never include unsafe, offensive, or misleading language.
+8. Only use the provided context: draft content, brand guidelines, tone, target audience, keywords, and original request.
 
-CRITICAL: You MUST preserve any word count limits from the original request. If the user asked for "50 word content" 
-or similar, your refined output must strictly adhere to that limit without needing additional tracking or processing.
-
-The refined content should be publication-ready and maintain the original format while making these improvements.
-\n
-Default behavior:
-- Unless the original request clearly and explicitly asks for MULTIPLE pieces with a specific number (e.g., "3 posts", "two tweets", "a 5-part series"), ensure the output is EXACTLY ONE cohesive piece.
-- Do NOT split into multiple posts or sections like "Post 1", "Post 2" unless the request explicitly specifies a count.
-
-Return your output as a structured JSON object.
+==============================
+     OBJECTIVE
+==============================
+Return a structured JSON object with one refined, polished, brand-aligned, 
+and publication-ready piece of content that strictly follows the original request.
 """,
                 ),
                 (
@@ -102,12 +99,13 @@ from the original request, especially any word count limits.""",
         result = await self.llm.generate(
             prompt=self.refine_prompt,
             input={
-                "draft_content": draft_content,
-                "brand_guidelines": brand_guidelines,
-                "tone": tone,
-                "target_audience": target_audience,
-                "user_qurey": user_qurey or "No specific requirements provided",
-                "keywords": keywords,
+                "draft_content": flatten_dict(draft_content),
+                "brand_guidelines": flatten_dict(brand_guidelines),
+                "tone": flatten_dict(tone),
+                "target_audience": flatten_dict(target_audience),
+                "user_qurey": flatten_dict(user_qurey)
+                or "No specific requirements provided",
+                "keywords": flatten_dict(keywords),
             },
             output_schema=RefinedContent,
         )

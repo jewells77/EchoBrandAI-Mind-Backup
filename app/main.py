@@ -54,4 +54,4 @@ if __name__ == "__main__":
     # Reason: Uvicorn's reload=True (auto-reload on code changes) interferes with
     # Playwright's subprocess management and can raise NotImplementedError.
     # Tip: Use reload=True only during normal development (without Playwright).
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)

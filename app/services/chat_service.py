@@ -4,6 +4,7 @@ import uuid
 from app.domain.graphs.content_workflow import LangGraphContentWorkflow
 from app.domain.llm_providers.factory import create_llm_provider
 from app.infrastructure.db.langgraph_memory import LangGraphMemoryHandler
+from langchain.schema import HumanMessage
 
 
 class ChatService:
@@ -107,6 +108,7 @@ class ChatService:
             # Create a new state with the user's message
             updated_state = {
                 **current_state.values,
+                "messages": [HumanMessage(content=message)],
                 "user_qurey": message,
                 "step": "generation",
                 "status": "running",
@@ -119,8 +121,8 @@ class ChatService:
             )
             # Add thread_id to the result for continuity
             result["thread_id"] = thread_id
+            result["message"] = updated_state.get("user_qurey", message)
             result["status"] = "completed"
-
             return result
 
         except Exception as e:

@@ -59,8 +59,8 @@ class ChatInitResponse(BaseModel):
     content_strategy: Dict[str, Any] = Field(
         ..., description="Content strategy recommendations"
     )
-    final_output: Dict[str, Any] = Field(
-        ..., description="Structured final output including title and content"
+    final_output: str = Field(
+        ..., description="Final output including title and content"
     )
 
 
@@ -70,6 +70,6 @@ class ChatContinueResponse(BaseModel):
     thread_id: str = Field(..., description="Thread ID for the conversation")
     message: Optional[str] = Field(None, description="Conversational response message")
     status: str = Field(..., description="Status of the conversation")
-    final_output: Optional[Dict[str, Any]] = Field(
-        None, description="Structured final output including title and content"
+    final_output: str = Field(
+        ..., description="Final output including title and content"
     )

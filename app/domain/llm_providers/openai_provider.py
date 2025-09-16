@@ -98,7 +98,8 @@ class OpenAIProvider(BaseLLMProvider):
         Returns:
             AsyncGenerator[AIMessage, None]: Generator yielding chunks of the response
         """
-        normalized_messages = self._normalize_messages(messages)
+        # normalized_messages = self._normalize_messages(messages)
+        normalized_messages = messages
 
         # Set up streaming callback handler
         callback_handler = AsyncIteratorCallbackHandler()
