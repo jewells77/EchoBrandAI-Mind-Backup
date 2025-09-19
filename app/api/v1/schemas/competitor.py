@@ -6,6 +6,7 @@ class CompetitorScrapeRequest(BaseModel):
     """Request model for scraping competitor data."""
 
     competitors: List[str] = Field(..., description="List of competitor URLs to scrape")
+    user_id: str = Field(..., description="user identifier for namespacing embeddings")
 
 
 class CompetitorInsightsResponse(BaseModel):

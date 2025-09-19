@@ -11,9 +11,9 @@ class CompetitorInsights(TypedDict):
     """Structured insights from competitor content analysis."""
 
     competitor_insights: Annotated[
-        List[Dict[str, Any]],
+        List[Dict[str, str]],
         ...,
-        "List of insights from each competitor",
+        "List of competitor objects, each with 'name' and a single plain text 'insights' field summarizing all relevant details, services, and unique features.",
     ]
     content_gaps: Annotated[
         List[str],
@@ -45,7 +45,7 @@ class CompetitorIntelligenceAgent:
 1. Only analyze the content explicitly provided in the context.
 2. Do not invent competitor details or strategies not found in the given content.
 3. Always output a structured JSON object with these keys:
-   - competitor_insights
+   - competitor_insights (list of objects, each with only 'name' and a single plain text 'insights' field summarizing all relevant details, services, and unique features)
    - content_gaps
    - trending_topics
    - content_formats
@@ -59,6 +59,8 @@ Provide a clear, structured competitor analysis that:
 - Surfaces insights, gaps, and opportunities
 - Identifies trending topics and formats
 - Remains factual, safe, and actionable
+
+For each competitor, only return 'name' and a single 'insights' field. The 'insights' field must be a plain text summary covering all relevant details, services, and unique features. Do not use arrays for insights.
 """,
                 ),
                 (
@@ -67,7 +69,7 @@ Provide a clear, structured competitor analysis that:
 
 {competitor_content}
 
-Analyze this content and provide structured insights.""",
+Analyze this content and provide structured insights as per the instructions above.""",
                 ),
             ]
         )
@@ -162,4 +164,17 @@ Analyze this content and provide structured insights.""",
             },
             output_schema=CompetitorInsights,
         )
+
+        # Post-process competitor_insights to only keep 'name' and a single 'insights' string
+        processed_insights = []
+        for entry in result.get("competitor_insights", []):
+            name = entry.get("name")
+            insights = entry.get("insights")
+            if isinstance(insights, list):
+                # Join all details into a single summary string
+                summary = " ".join(str(i) for i in insights)
+            else:
+                summary = str(insights) if insights else ""
+            processed_insights.append({"name": name, "insights": summary})
+        result["competitor_insights"] = processed_insights
         return result
