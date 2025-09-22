@@ -1,31 +1,22 @@
-from pydantic import BaseModel, Field
-from typing import Dict, Any, List, Optional
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class CompetitorScrapeRequest(BaseModel):
     """Request model for scraping competitor data."""
 
-    competitors: List[str] = Field(..., description="List of competitor URLs to scrape")
+    url: HttpUrl = Field(..., description="Single competitor URL to scrape")
+    user_id: str = Field(..., description="user identifier for namespacing embeddings")
 
 
-class CompetitorInsightsResponse(BaseModel):
-    """Response model for competitor insights."""
+class DeleteEmbeddingsRequest(BaseModel):
+    """
+    Request model for deleting embeddings from Pinecone.
+    Example:
+        metadata_filter = {"url": {"$eq": "https://silverlifegym.in/"}}
+    """
 
-    competitor_insights: List[Dict[str, Any]] = Field(
-        ..., description="List of insights from each competitor"
+    metadata_filter: dict = Field(
+        ...,
+        description="Metadata filter for deletion, e.g., {'url': {'$eq': 'https://silverlifegym.in/'}}",
     )
-    content_gaps: List[str] = Field(
-        ..., description="Content opportunities the brand could exploit"
-    )
-    trending_topics: List[str] = Field(
-        ..., description="Topics trending across competitor content"
-    )
-    content_types: List[str] = Field(
-        ..., description="Content formats being used by competitors"
-    )
-    scraping_error: Optional[bool] = Field(
-        None, description="Indicates if there were errors during competitor scraping"
-    )
-    error_details: Optional[List[str]] = Field(
-        None, description="Details about scraping errors if any occurred"
-    )
+    namespace: str = Field(..., description="User ID or namespace for deletion scope.")

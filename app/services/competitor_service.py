@@ -1,26 +1,72 @@
 from typing import List, Dict, Any
-
-from app.domain.agents.competitor_intelligence import CompetitorIntelligenceAgent
-from app.domain.llm_providers.base import BaseLLMProvider
 from app.infrastructure.scraping.playwright_client import PlaywrightScraper
+from app.services.embedding_service import EmbeddingService
+
+from app.core.logger import get_logger
+
+import re
+
+logger = get_logger(__name__)
+
+
+# def clean_text(text):
+#     text = text.replace("\xa0", " ").replace("\u200b", " ")
+#     text = re.sub(r"\s+", " ", text)  # collapse multiple spaces
+#     text = re.sub(r"\n\s*\n", "\n\n", text)  # clean double newlines
+#     return text.strip()
 
 
 class CompetitorService:
-    """Service for handling competitor intelligence operations."""
+    def __init__(self, scraper: PlaywrightScraper):
+        self.scraper = scraper
 
-    def __init__(self, llm: BaseLLMProvider, scraper: PlaywrightScraper = None):
-        self.competitor_agent = CompetitorIntelligenceAgent(llm, scraper)
-
-    async def get_competitor_insights(
-        self, competitor_links: List[str]
-    ) -> Dict[str, Any]:
+    async def scrape_single_competitor(self, url: str) -> Any:
         """
-        Get insights about competitors by scraping their websites.
+        Scrape a single competitor website and clean the text.
 
         Args:
-            competitor_links: List of competitor URLs to analyze
+            url: Competitor URL to scrape
 
         Returns:
-            Dictionary containing competitor insights
+            Dict with cleaned text or error
         """
-        return await self.competitor_agent.summarize_competitors(competitor_links)
+        try:
+            raw_data = await self.scraper.fetch_content(url)
+            text_content = raw_data.get("text_content", "")
+            return {"status": "success", "url": url, "text_content": text_content}
+        except Exception as e:
+            logger.exception(f"Error scraping {url}")
+            raise
+
+    """Service for scraping competitor websites."""
+
+    async def process_competitor_website(
+        self,
+        url: str,
+        embedding_provider_name: str = "huggingface",
+        namespace: str = "",
+    ) -> Dict[str, Any]:
+        """
+        Scrape competitor website, clean text, then embed and upsert, returning processed data.
+
+        Args:
+            url: Competitor URL to process
+            embedding_provider_name: Which embedding provider to use (default: huggingface)
+
+        Returns:
+            Dictionary containing processed data for competitor
+        """
+        results = {}
+        embedding_service = EmbeddingService(embedding_provider_name, namespace)
+        try:
+            scrape_result = await self.scrape_single_competitor(url)
+            if scrape_result.get("status") == "success":
+                cleaned = scrape_result["text_content"]
+                embedding_service.process_and_upsert(cleaned, url)
+                results[url] = {"status": "success", "url": url}
+            else:
+                results[url] = scrape_result
+        except Exception as e:
+            logger.exception(f"Error scraping {url}")
+            raise
+        return results

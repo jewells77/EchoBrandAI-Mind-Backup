@@ -28,9 +28,9 @@ class Settings(BaseSettings):
     MONGODB_WRITES_COLLECTION: str = "langgraph_writes"
 
     # Vectorstore settings
-    CHROMA_PERSIST_DIRECTORY: str = "./chroma_db"
-    PINECONE_API_KEY: Optional[str] = None
-    PINECONE_ENVIRONMENT: Optional[str] = None
+    PINECONE_API_KEY: str = os.getenv("PINECONE_API_KEY", "")
+    PINECONE_ENVIRONMENT: str = os.getenv("PINECONE_ENVIRONMENT", "")
+    PINECONE_INDEX_NAME: str = os.getenv("PINECONE_INDEX_NAME", "")
 
     class Config:
         env_file = ".env"
