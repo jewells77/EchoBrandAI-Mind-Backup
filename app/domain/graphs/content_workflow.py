@@ -21,7 +21,7 @@ from langgraph.graph.message import add_messages
 from app.infrastructure.db.langgraph_memory import LangGraphMemoryHandler
 
 from app.domain.agents.brand_dna_analyzer import BrandDNAAnalyzerAgent
-from app.domain.agents.competitor_intelligence import CompetitorIntelligenceAgent
+
 from app.domain.agents.content_strategist import ContentStrategistAgent
 from app.domain.agents.content_generator import ContentGeneratorAgent
 from app.domain.agents.content_refiner import ContentRefinerAgent
@@ -45,7 +45,6 @@ class WorkflowState(TypedDict):
     # Process state
     step: Literal[
         "brand_analysis",
-        "competitor_analysis",
         "strategy",
         "generation",
         "refinement",
@@ -77,7 +76,6 @@ class LangGraphContentWorkflow:
 
         # Initialize agents
         self.brand_agent = BrandDNAAnalyzerAgent(llm)
-        self.competitor_agent = CompetitorIntelligenceAgent(llm, scraper)
         self.strategist_agent = ContentStrategistAgent(llm)
         self.generator_agent = ContentGeneratorAgent(llm)
         self.refiner_agent = ContentRefinerAgent(llm)
@@ -94,7 +92,6 @@ class LangGraphContentWorkflow:
         # Define the nodes
         builder.add_node("is_state_existing", self._is_state_existing)
         builder.add_node("brand_analysis", self._analyze_brand)
-        builder.add_node("competitor_analysis", self._analyze_competitors)
         builder.add_node("strategy", self._create_strategy)
         builder.add_node("generation", self._generate_content)
         builder.add_node("refinement", self._refine_content)
@@ -111,9 +108,8 @@ class LangGraphContentWorkflow:
             },
         )
 
-        # Step 1: Sequential flow - brand_analysis → competitor_analysis → strategy
-        builder.add_edge("brand_analysis", "competitor_analysis")
-        builder.add_edge("competitor_analysis", "strategy")
+        # Step 1: Sequential flow - brand_analysis → strategy
+        builder.add_edge("brand_analysis", "strategy")
 
         # Step 2: Strategy to generation
         builder.add_conditional_edges(
@@ -155,66 +151,21 @@ class LangGraphContentWorkflow:
                 "error": f"Brand analysis failed: {str(e)}",
             }
 
-    async def _analyze_competitors(self, state: WorkflowState) -> WorkflowState:
-        """Analyze competitors."""
-        try:
-            # Use provided summary if available, otherwise use empty placeholder
-            if "competitors_summary" in state and state["competitors_summary"]:
-                competitor_insights = state["competitors_summary"]
-            else:
-                # If no summary provided, create empty placeholder
-                competitor_insights = {
-                    "competitor_insights": [],
-                    "content_gaps": ["No competitor data provided for analysis"],
-                    "trending_topics": [],
-                    "content_types": [],
-                }
-
-            # Check if there was a scraping error but we have some fallback data
-            if competitor_insights.get("scraping_error"):
-                # Log the error but continue with the workflow using the limited data
-                # This is important - we don't want to fail the entire workflow just because
-                # we couldn't scrape competitors, especially if we have some data
-                return {
-                    **state,
-                    "competitor_insights": competitor_insights,
-                    "step": "competitor_analysis",
-                    "status": "completed",
-                    "competitor_scraping_warning": ", ".join(
-                        competitor_insights.get("error_details", ["Access restricted"])
-                    ),
-                }
-
-            return {
-                **state,
-                "competitor_insights": competitor_insights,
-                "step": "competitor_analysis",
-                "status": "completed",
-            }
-        except Exception as e:
-            return {
-                **state,
-                "step": "competitor_analysis",
-                "status": "error",
-                "error": f"Competitor analysis failed: {str(e)}",
-            }
-
     async def _create_strategy(self, state: WorkflowState) -> WorkflowState:
         """Create content strategy."""
-        # Check if we have both required inputs
-        if "brand_profile" not in state or "competitor_insights" not in state:
-            # This shouldn't happen in a properly configured graph
+        # Only require brand_profile, not competitor_insights
+        if "brand_profile" not in state:
             return {
                 **state,
                 "step": "strategy",
                 "status": "error",
-                "error": "Missing required inputs for strategy",
+                "error": "Missing required brand_profile for strategy",
             }
 
         try:
             strategy = await self.strategist_agent.suggest_strategy(
                 state["brand_profile"],
-                state["competitor_insights"],
+                state.get("competitor_insights", {}),
                 state["user_qurey"],
             )
             return {

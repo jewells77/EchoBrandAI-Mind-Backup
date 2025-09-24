@@ -40,10 +40,6 @@ class UnifiedChatRequest(BaseModel):
         missing_fields = []
         if values.brand_details is None:
             missing_fields.append("brand_details")
-        if values.competitors_summary is None:
-            missing_fields.append("competitors_summary")
-        if values.guidelines is None:
-            missing_fields.append("guidelines")
         if missing_fields:
             raise ValueError(
                 f"When thread_id is not provided, {', '.join(missing_fields)} must be provided"
