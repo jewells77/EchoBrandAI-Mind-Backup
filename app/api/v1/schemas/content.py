@@ -15,3 +15,17 @@ class BrandDetails(BaseModel):
     additional_info: Optional[Dict[str, Any]] = Field(
         None, description="Additional brand information"
     )
+
+
+class FinalizedPostRequest(BaseModel):
+    """Request model for extracting finalized posts by thread_id."""
+
+    thread_id: str = Field(..., description="Thread ID of the conversation workflow")
+
+
+class FinalizedPostResponse(BaseModel):
+    """Response model for finalized multi-platform post extraction."""
+
+    platforms: Dict[str, str] = Field(
+        ..., description="Map of platform name to finalized post content"
+    )
