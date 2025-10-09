@@ -5,18 +5,11 @@ class CompetitorScrapeRequest(BaseModel):
     """Request model for scraping competitor data."""
 
     url: HttpUrl = Field(..., description="Single competitor URL to scrape")
-    user_id: str = Field(..., description="user identifier for namespacing embeddings")
+    user_id: str = Field(..., description="user id")
 
 
-class DeleteEmbeddingsRequest(BaseModel):
-    """
-    Request model for deleting embeddings from Pinecone.
-    Example:
-        metadata_filter = {"url": {"$eq": "https://silverlifegym.in/"}}
-    """
-
-    metadata_filter: dict = Field(
-        ...,
-        description="Metadata filter for deletion, e.g., {'url': {'$eq': 'https://silverlifegym.in/'}}",
+class DeleteWebsiteEmbeddingsRequest(BaseModel):
+    user_id: str = Field(..., description="user id")
+    filter_dict: dict = Field(
+        ..., description="Filter dict for deletion, e.g. {'url': 'www.abc.com'}"
     )
-    namespace: str = Field(..., description="User ID or namespace for deletion scope.")

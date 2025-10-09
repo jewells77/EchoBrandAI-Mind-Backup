@@ -85,5 +85,4 @@ Analyze the above conversation and provide a finalized structured social media p
             },
             output_schema=FinalizedMultiPlatformPost,
         )
-        # print("result Jack", result)
         return result

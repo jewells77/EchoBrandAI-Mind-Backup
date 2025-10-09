@@ -1,8 +1,11 @@
 # path: app/config.py
 import os
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, ClassVar, List, Dict
 from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -28,9 +31,16 @@ class Settings(BaseSettings):
     MONGODB_WRITES_COLLECTION: str = "langgraph_writes"
 
     # Vectorstore settings
-    PINECONE_API_KEY: str = os.getenv("PINECONE_API_KEY", "")
-    PINECONE_ENVIRONMENT: str = os.getenv("PINECONE_ENVIRONMENT", "")
-    PINECONE_INDEX_NAME: str = os.getenv("PINECONE_INDEX_NAME", "")
+    QDRANT_API_KEY: str = os.getenv("QDRANT_API_KEY", "")
+    QDRANT_URL: str = os.getenv("QDRANT_URL", "")
+    QDRANT_WEBSITE_CONTENT_COLLECTION: ClassVar[str] = "website-content"
+    QDRANT_COLLECTIONS: ClassVar[List[Dict[str, list]]] = [
+        {
+            "name": QDRANT_WEBSITE_CONTENT_COLLECTION,
+            "required_payload": ["url", "user_id", "text"],
+            "optional_payload": ["timestamp"],
+        }
+    ]
 
     class Config:
         env_file = ".env"

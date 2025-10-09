@@ -1,8 +1,8 @@
 from typing import List, Dict, Any
 from app.infrastructure.scraping.playwright_client import PlaywrightScraper
 from app.services.embedding_service import EmbeddingService
-
 from app.core.logger import get_logger
+from app.config import settings
 
 import re
 
@@ -44,7 +44,7 @@ class CompetitorService:
         self,
         url: str,
         embedding_provider_name: str = "huggingface",
-        namespace: str = "",
+        user_id: str = "",
     ) -> Dict[str, Any]:
         """
         Scrape competitor website, clean text, then embed and upsert, returning processed data.
@@ -56,13 +56,19 @@ class CompetitorService:
         Returns:
             Dictionary containing processed data for competitor
         """
-        results = {}
-        embedding_service = EmbeddingService(embedding_provider_name, namespace)
         try:
+            # Ensure collection exists, throw error if not
+            results = {}
+            collection_name = settings.QDRANT_WEBSITE_CONTENT_COLLECTION
+            embedding_service = EmbeddingService(
+                embedding_provider_name, collection_name
+            )
             scrape_result = await self.scrape_single_competitor(url)
             if scrape_result.get("status") == "success":
                 cleaned = scrape_result["text_content"]
-                embedding_service.process_and_upsert(cleaned, url)
+                embedding_service.process_and_upsert(
+                    cleaned, metadata={"url": url, "user_id": user_id}
+                )
                 results[url] = {"status": "success", "url": url}
             else:
                 results[url] = scrape_result
