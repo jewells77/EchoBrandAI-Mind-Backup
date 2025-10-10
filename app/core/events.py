@@ -1,41 +1,31 @@
+from fastapi import FastAPI
 from app.core.logger import logger
-from app.infrastructure.db.mongodb import connect_to_mongo, close_mongo_connection
-from app.infrastructure.vectorstores import qdrant_store
-from app.config import settings
+from app.infrastructure.db import mongodb
+from app.infrastructure.vectorstores import qdrant_config, qdrant_store
 
 
-async def startup_event_handler():
-    """
-    Function to handle startup events.
-    - Initialize database connections
-    - Set up any necessary resources
-    """
+async def startup_event_handler(fastapi_app: FastAPI):
     logger.info("Starting up the application...")
 
-    # Connect to MongoDB
-    await connect_to_mongo()
-    logger.info("Connected to MongoDB")
+    try:
+        # MongoDB
+        fastapi_app.state.mongo_client = await mongodb.connect_to_mongo()
+        logger.info("Connected to MongoDB")
 
-    # Ensure all Qdrant collections exist
-    for collection in settings.QDRANT_COLLECTIONS:
-        collection_name = collection["name"]
-        if not qdrant_store.collection_exists(collection_name):
-            qdrant_store.create_collection(collection_name)
-            qdrant_store.create_payload_index(collection_name, "url")
-            qdrant_store.create_payload_index(collection_name, "user_id")
-            logger.info(f"Created Qdrant collection: {collection_name}")
-        else:
-            logger.info(f"Qdrant collection already exists: {collection_name}")
+        # Qdrant
+        fastapi_app.state.qdrant_client = qdrant_config.init_qdrant()
+        qdrant_store.ensure_all_collections_exist()
+        logger.info("Qdrant initialized successfully")
+
+    except Exception as e:
+        logger.error(f"❌ Startup failed: {e}")
+        # Ensure we close MongoDB if startup fails midway
+        await mongodb.close_mongo_connection(fastapi_app)
+        raise
 
 
-async def shutdown_event_handler():
-    """
-    Function to handle shutdown events.
-    - Close database connections
-    - Clean up any resources
-    """
+async def shutdown_event_handler(fastapi_app: FastAPI):
     logger.info("Shutting down the application...")
 
-    # Close MongoDB connection
-    await close_mongo_connection()
+    await mongodb.close_mongo_connection(fastapi_app)
     logger.info("Disconnected from MongoDB")

@@ -6,16 +6,21 @@ from qdrant_client.models import (
     MatchValue,
     FilterSelector,
 )
-from app.infrastructure.vectorstores.qdrant_config import qdrant_client
+from fastapi import FastAPI
+
+from app.infrastructure.vectorstores.qdrant_config import get_qdrant_client
 from app.api.exceptions import APIError
 from app.config import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 COLLECTION_DIM = 384
 COLLECTION_DISTANCE = Distance.COSINE
 
 
 def collection_exists(collection_name: str) -> bool:
-    return qdrant_client.collection_exists(collection_name=collection_name)
+    return get_qdrant_client().collection_exists(collection_name=collection_name)
 
 
 def create_collection(collection_name: str):
@@ -23,7 +28,7 @@ def create_collection(collection_name: str):
         raise APIError(
             f"Collection '{collection_name}' already exists.", status_code=400
         )
-    qdrant_client.create_collection(
+    get_qdrant_client().create_collection(
         collection_name,
         vectors_config=VectorParams(size=COLLECTION_DIM, distance=COLLECTION_DISTANCE),
     )
@@ -95,18 +100,21 @@ def validate_fields_exist(collection_name: str, field_dict: dict):
 
 def upsert_points(collection_name: str, points: list):
     ensure_collection_exists(collection_name)
-    return qdrant_client.upsert(collection_name, wait=True, points=points)
+    return get_qdrant_client().upsert(collection_name, wait=True, points=points)
 
 
 def query_points(collection_name: str, vector: list, top: int = 5, filter: dict = None):
     ensure_collection_exists(collection_name)
-    return qdrant_client.search(
+    return get_qdrant_client().search(
         collection_name, query_vector=vector, limit=top, query_filter=filter
     )
 
 
 def query_points_by_filter(
-    collection_name: str, vector: list, top: int = 5, filter_dict: dict = None
+    collection_name: str,
+    vector: list,
+    top: int = 5,
+    filter_dict: dict = None,
 ):
     """
     Retrieve points from Qdrant collection using a dynamic filter.
@@ -142,14 +150,16 @@ def query_points_by_filter(
     else:
         qdrant_filter = None
 
-    return qdrant_client.search(
+    return get_qdrant_client().search(
         collection_name, query_vector=vector, limit=top, query_filter=qdrant_filter
     )
 
 
 def delete_points(collection_name: str, point_ids: list):
     ensure_collection_exists(collection_name)
-    return qdrant_client.delete(collection_name, points_selector={"points": point_ids})
+    return get_qdrant_client().delete(
+        collection_name, points_selector={"points": point_ids}
+    )
 
 
 def delete_points_by_filter(collection_name: str, filter_dict: dict):
@@ -181,12 +191,24 @@ def delete_points_by_filter(collection_name: str, filter_dict: dict):
 
     qdrant_filter = Filter(**filter_kwargs)
     selector = FilterSelector(filter=qdrant_filter)
-    return qdrant_client.delete(collection_name, points_selector=selector)
+    return get_qdrant_client().delete(collection_name, points_selector=selector)
 
 
 def delete_collection(collection_name: str):
     ensure_collection_exists(collection_name)
-    return qdrant_client.delete_collection(collection_name)
+    return get_qdrant_client().delete_collection(collection_name)
+
+
+def ensure_all_collections_exist():
+    for collection in settings.QDRANT_COLLECTIONS:
+        collection_name = collection["name"]
+        if not collection_exists(collection_name):
+            create_collection(collection_name)
+            create_payload_index(collection_name, "url")
+            create_payload_index(collection_name, "user_id")
+            logger.info(f"Created Qdrant collection: {collection_name}")
+        else:
+            logger.info(f"Qdrant collection already exists: {collection_name}")
 
 
 def create_payload_index(
@@ -199,7 +221,7 @@ def create_payload_index(
     ensure_collection_exists(collection_name)
     validate_fields_exist(collection_name, {field_name: None})
     try:
-        qdrant_client.create_payload_index(
+        get_qdrant_client().create_payload_index(
             collection_name=collection_name,
             field_name=field_name,
             field_schema=field_schema,

@@ -13,10 +13,10 @@ from app.api.exceptions import APIError
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    await startup_event_handler()
+    await startup_event_handler(app)
     yield
     # Shutdown
-    await shutdown_event_handler()
+    await shutdown_event_handler(app)
 
 
 # Create FastAPI app
