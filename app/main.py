@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from fastapi import Request
+from fastapi.responses import JSONResponse
 from app.api.router import api_router
 from app.config import settings
 from app.core.events import startup_event_handler, shutdown_event_handler
+from app.api.exceptions import APIError
 
 
 # Define lifespan context
@@ -31,7 +33,7 @@ app = FastAPI(
 # Set up CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,6 +41,18 @@ app.add_middleware(
 
 # Include API router
 app.include_router(api_router, prefix="/api")
+
+
+# Custom exception handler for APIError
+@app.exception_handler(APIError)
+async def api_error_handler(request: Request, exc: APIError):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "message": exc.message,
+            "public_message": exc.public_message,
+        },
+    )
 
 
 # Health check endpoint at root

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, model_validator
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 
 from app.api.v1.schemas.content import BrandDetails
 
@@ -47,24 +47,14 @@ class UnifiedChatRequest(BaseModel):
         return values
 
 
-class ChatInitResponse(BaseModel):
-    """Response model for chat initialization."""
-
-    thread_id: str = Field(..., description="Thread ID for continuing the conversation")
-
-    content_strategy: Dict[str, Any] = Field(
-        ..., description="Content strategy recommendations"
-    )
-    final_output: str = Field(
-        ..., description="Final output including title and content"
-    )
-
-
 class ChatContinueResponse(BaseModel):
     """Response model for continuing a chat conversation."""
 
     thread_id: str = Field(..., description="Thread ID for the conversation")
     message: Optional[str] = Field(None, description="Conversational response message")
+    ai_generated_images: Optional[List[str]] = Field(
+        None, description="List of AI-generated image URLs"
+    )
     status: str = Field(..., description="Status of the conversation")
     final_output: str = Field(
         ..., description="Final output including title and content"

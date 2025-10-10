@@ -64,3 +64,4 @@ logs/
 
 # Docker
 docker-compose.override.yml
+app/domain/tools/workflow_graph.png

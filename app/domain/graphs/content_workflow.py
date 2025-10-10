@@ -18,10 +18,12 @@ from langchain.schema import AIMessage, HumanMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 
+from app.domain.tools.url_extractors import extract_query_and_azure_media_links
 from app.infrastructure.db.langgraph_memory import LangGraphMemoryHandler
 
+from app.domain.agents.supervisor_agent import SupervisorAgent
+from app.domain.agents.image_generation_agent import ImageGenerationAgent
 from app.domain.agents.brand_dna_analyzer import BrandDNAAnalyzerAgent
-
 from app.domain.agents.content_strategist import ContentStrategistAgent
 from app.domain.agents.content_generator import ContentGeneratorAgent
 from app.domain.agents.content_refiner import ContentRefinerAgent
@@ -29,6 +31,54 @@ from app.domain.agents.final_output import FinalOutputAgent
 from app.domain.llm_providers.base import BaseLLMProvider
 from app.infrastructure.scraping.playwright_client import PlaywrightScraper
 from app.api.v1.schemas.common import get_last_n_chats
+from app.api.exceptions import APIError
+from app.config import settings
+
+import re
+
+
+# TODO: REMOVE THIS FUNCTION AFTER TESTING
+def extract_query_and_gdrive_links(text: str) -> tuple[str, list[str]]:
+    """
+    Extract Google Drive links from the text, convert them to direct download links,
+    and return the cleaned query + list of image URLs.
+    """
+    # Pattern to find all drive links
+    pattern = r"https?://drive\.google\.com/[^\s]+"
+    drive_links = re.findall(pattern, text)
+
+    # Convert each to direct download URL
+    image_urls = []
+    for link in drive_links:
+        image_urls.append(gdrive_to_download_url(link))
+
+    # Clean query (remove the links)
+    cleaned_query = re.sub(pattern, "", text).strip()
+
+    return cleaned_query, image_urls
+
+
+def gdrive_to_download_url(url: str) -> str:
+    """
+    Convert a Google Drive share/view link to a direct download URL.
+    """
+    patterns = [
+        r"file/d/([a-zA-Z0-9_-]+)",
+        r"id=([a-zA-Z0-9_-]+)",
+        r"thumbnail\?id=([a-zA-Z0-9_-]+)",
+    ]
+
+    file_id = None
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            file_id = match.group(1)
+            break
+
+    if not file_id:
+        raise ValueError(f"Could not extract file ID from URL: {url}")
+
+    return f"https://drive.google.com/uc?export=download&id={file_id}"
 
 
 # Type definitions for the state
@@ -36,6 +86,10 @@ class WorkflowState(TypedDict):
     """State of the content creation workflow."""
 
     messages: Annotated[List[AIMessage | HumanMessage], add_messages]
+    # next_agent: str = "" # to be used for the supervisor agent when we have more agents
+    ai_generated_images: NotRequired[List[str]]
+    # uploaded_images: NotRequired[List[str]]
+
     # Inputs
     brand_details: Dict[str, Any]
     competitors_summary: NotRequired[Dict[str, Any]]  # Pre-analyzed competitor data
@@ -44,6 +98,8 @@ class WorkflowState(TypedDict):
 
     # Process state
     step: Literal[
+        "supervisor",
+        "image_generation",
         "brand_analysis",
         "strategy",
         "generation",
@@ -75,6 +131,8 @@ class LangGraphContentWorkflow:
         self.scraper = scraper or PlaywrightScraper()
 
         # Initialize agents
+        self.supervisor_agent = SupervisorAgent(llm)
+        self.image_agent = ImageGenerationAgent()
         self.brand_agent = BrandDNAAnalyzerAgent(llm)
         self.strategist_agent = ContentStrategistAgent(llm)
         self.generator_agent = ContentGeneratorAgent(llm)
@@ -90,6 +148,8 @@ class LangGraphContentWorkflow:
         builder = StateGraph(WorkflowState)
 
         # Define the nodes
+        builder.add_node("supervisor", self._supervisor_node)
+        builder.add_node("image_generation", self._image_generate)
         builder.add_node("is_state_existing", self._is_state_existing)
         builder.add_node("brand_analysis", self._analyze_brand)
         builder.add_node("strategy", self._create_strategy)
@@ -100,28 +160,31 @@ class LangGraphContentWorkflow:
         # Define the edges (workflow steps)
         # Step 0: Decide route based on whether prior state-like data exists
         builder.add_conditional_edges(
+            "supervisor",
+            self._supervisor_router,
+            {"image_generation": "image_generation", "finalize": "finalize"},
+        )
+
+        builder.add_conditional_edges(
             "is_state_existing",
             self._state_router,
             {
-                "finalize": "finalize",
+                "supervisor": "supervisor",
                 "brand_analysis": "brand_analysis",
             },
         )
 
-        # Step 1: Sequential flow - brand_analysis → strategy
         builder.add_edge("brand_analysis", "strategy")
 
-        # Step 2: Strategy to generation
         builder.add_conditional_edges(
             "strategy", self._strategy_router, {"generation": "generation", "end": END}
         )
 
-        # Step 3: Generation to refinement
         builder.add_edge("generation", "refinement")
 
-        # Step 4: Refinement to end
         builder.add_edge("refinement", "finalize")
         builder.add_edge("finalize", END)
+        builder.add_edge("image_generation", END)
 
         # Set is_state_existing as the entry point to choose the path
         builder.set_entry_point("is_state_existing")
@@ -131,6 +194,39 @@ class LangGraphContentWorkflow:
         return builder
 
     # Node implementations
+
+    async def _supervisor_node(self, state: WorkflowState) -> WorkflowState:
+        """Supervisor node: can update state or just mark step."""
+        return {**state, "step": "supervisor"}
+
+    async def _image_generate(self, state: WorkflowState) -> WorkflowState:
+        """Image generation node."""
+
+        user_input = state["user_qurey"]
+        query, image_urls = extract_query_and_azure_media_links(user_input)
+        if len(image_urls) > 3:
+            raise APIError(
+                "A maximum of 3 image URLs are allowed.",
+                status_code=400,
+            )
+        llm_response = await self.image_agent.generate_image(
+            prompt=query, image_urls=image_urls
+        )
+        final_output_text = llm_response.get("text", "")
+        ai_generated_images = llm_response.get("images", [])
+        return {
+            **state,
+            "final_output": final_output_text,
+            "ai_generated_images": ai_generated_images,
+            "messages": [AIMessage(content=final_output_text)],
+            "step": "end",
+            "status": "completed",
+        }
+
+    async def _supervisor_router(self, state: WorkflowState) -> str:
+        next_agent = await self.supervisor_agent.decide(state["user_qurey"])
+        return "image_generation" if next_agent == "image_agent" else "finalize"
+
     async def _analyze_brand(self, state: WorkflowState) -> WorkflowState:
         """Analyze the brand DNA."""
         try:
@@ -211,7 +307,8 @@ class LangGraphContentWorkflow:
                 "brand_profile",
             )
         )
-        return "finalize" if has_prior_state else "brand_analysis"
+        # return "finalize" if has_prior_state else "brand_analysis"
+        return "supervisor"
 
     async def _is_state_existing(self, state: WorkflowState) -> WorkflowState:
         """No-op node used before routing; returns state unchanged."""
@@ -297,7 +394,6 @@ class LangGraphContentWorkflow:
         brand_profile = state.get("brand_profile", {})
         competitor_insights = state.get("competitor_insights", {})
         guidelines = state.get("guidelines", {})
-        final_output = state.get("final_output", {})
         messages = state.get("messages", [])
         last_messages = get_last_n_chats(messages, n=15)
 
@@ -307,7 +403,6 @@ class LangGraphContentWorkflow:
             user_message,
             brand_profile,
             competitor_insights,
-            final_output,
             guidelines,
             last_messages,
         )
@@ -372,6 +467,12 @@ class LangGraphContentWorkflow:
 
         # Compile the workflow with the MongoDB checkpointer
         workflow = self.graph_builder.compile(checkpointer=memory_saver)
+
+        # Export visualization if requested
+        if settings.SHOW_WORKFLOW_GRAPH:
+            from app.domain.tools.graph_visualizer import save_workflow_graph_png
+
+            save_workflow_graph_png(workflow)
 
         # Run the workflow
         result = await workflow.ainvoke(

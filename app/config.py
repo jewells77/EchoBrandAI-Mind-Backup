@@ -1,8 +1,9 @@
 # path: app/config.py
 import os
 from pydantic_settings import BaseSettings
-from typing import Optional, ClassVar, List, Dict
+from typing import Optional, ClassVar, List, Dict, Union
 from dotenv import load_dotenv
+from pydantic import Field, field_validator
 
 # Load environment variables from .env file
 load_dotenv()
@@ -17,12 +18,14 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # LLM Provider settings
+    SHOW_WORKFLOW_GRAPH: bool = False
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY", "")
     OPENAI_MODEL_NAME: str = os.getenv("OPENAI_MODEL_NAME", "gpt-4-turbo")
     OPENAI_TEMPERATURE: float = 0.7
     OPENAI_MAX_TOKENS: Optional[int] = None
     LANGCHAIN_API_KEY: Optional[str] = os.getenv("LANGCHAIN_API_KEY", "")
     LANGCHAIN_PROJECT: Optional[str] = os.getenv("LANGCHAIN_PROJECT", "")
+    GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY", "")
 
     # MongoDB settings
     MONGODB_URI: str = "mongodb://localhost:27017"
@@ -41,6 +44,33 @@ class Settings(BaseSettings):
             "optional_payload": ["timestamp"],
         }
     ]
+    # Azure Blob Storage settings
+    AZURE_BLOB_CONNECTION_STRING: Optional[str] = os.getenv(
+        "AZURE_BLOB_CONNECTION_STRING", ""
+    )
+    AZURE_BLOB_CONTAINER: Optional[str] = os.getenv("AZURE_BLOB_CONTAINER", "")
+    # Azure Blob accepted domains (comma separated string or list)
+    ALLOWED_AZURE_BLOB_BASE_URLS: Union[str, list[str]] = Field(default="")
+
+    @field_validator("ALLOWED_AZURE_BLOB_BASE_URLS", mode="after")
+    @classmethod
+    def parse_allowed_blob_urls(cls, v):
+        if isinstance(v, list):
+            return [url.rstrip("/") for url in v]
+        if not v.strip():
+            return []
+        return [url.strip().rstrip("/") for url in v.split(",") if url.strip()]
+
+    # CORS settings
+    ALLOWED_ORIGINS: Union[str, list[str]] = Field(default="")
+
+    @field_validator("ALLOWED_ORIGINS", mode="after")
+    @classmethod
+    def parse_allowed_origins(cls, v):
+        """Parse comma-separated string into a list of origins."""
+        if not v.strip():
+            return [""]
+        return [origin.strip() for origin in v.split(",") if origin.strip()] or [""]
 
     class Config:
         env_file = ".env"

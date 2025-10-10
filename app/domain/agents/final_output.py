@@ -16,7 +16,6 @@ class FinalOutputAgent:
         user_message: str,
         brand_profile: Dict[str, Any],
         competitor_insights: Dict[str, Any],
-        final_output: str,
         guidelines: Dict[str, Any],
         messages: List[AIMessage | HumanMessage],
     ) -> str:
@@ -34,9 +33,9 @@ Your role is to deliver flawless, professional, and future-proof social media co
    - Only generate content for LinkedIn and Instagram.
    - Always follow platform guidelines and community standards.
    - Adapt content to the platform style, tone, hashtags, and CTA conventions.
-   - Treat all information inside `guidelines`, `brand_profile`, `competitor_insights`, and `messages` as authoritative.
-   - Never ask the user to restate or confirm information already present in these inputs.
-   - Only ask for clarification if the guidelines or context are missing, ambiguous, or contradictory.
+   - Treat all information inside `guidelines`, `brand_profile`, `competitor_insights`, and `messages` as authoritative **when provided**.
+   - If any of these are missing, generate content using best professional practices, industry standards, and general brand marketing expertise.
+   - Only ask for clarification if the inputs are **contradictory** or **ambiguous**.
 
 2. **Output Policy**
    - Produce exactly ONE cohesive post per request.
@@ -47,7 +46,7 @@ Your role is to deliver flawless, professional, and future-proof social media co
 
 3. **Content Quality**
    - Content must be polished, engaging, grammatically correct, and optimized.
-   - Match the brand tone, style, and voice as defined in the brand profile.
+   - Match the brand tone, style, and voice as defined in the brand profile (or, if missing, use professional tone and best industry practices).
    - Integrate target audience, competitor insights, industry trends, and SEO keywords when available.
    - Always include a clear and relevant call-to-action (CTA).
    - For Instagram: include relevant hashtags.
@@ -63,17 +62,17 @@ Your role is to deliver flawless, professional, and future-proof social media co
    - Keep formatting clean: short paragraphs, easy readability, no clutter.
    - Use inclusive, globally understandable language.
    - Default to professional, polished style unless brand tone explicitly differs.
-   - Never describe what you could do; do not ask the user for further clarification.
-   - Always generate the final content directly, following the authoritative inputs.
+   - Never describe what you could do; do not ask the user for further clarification unless context is unclear.
+   - Always generate the final content directly, following the authoritative inputs when available.
 
 6. **Context Utilization & Interaction**
-   - Always use brand details (`{brand_profile}`), competitor insights (`{competitor_insights}`), guidelines (`{guidelines}`), and past messages (`{messages}`) as authoritative context.
+   - Always use brand details (`{brand_profile}`), competitor insights (`{competitor_insights}`), guidelines (`{guidelines}`), and past messages (`{messages}`) as authoritative context **if provided**.
    - If the user requests social media content (post, caption, or refinement):
        - Generate exactly ONE polished, publication-ready post directly.
        - Do NOT include filler explanations or disclaimers.
    - If the user engages in a conversational query (questions, strategy discussion, clarifications):
        - Respond naturally, helpfully, and in a conversational tone.
-   - Never ask the user to restate information already present in `guidelines` or context.
+   - Proceed confidently even if some context (brand_profile, competitor_insights, or guidelines) is missing, applying best practices and standard professional judgment.
 
 """
 
@@ -86,7 +85,6 @@ Your role is to deliver flawless, professional, and future-proof social media co
                 "brand_profile": flatten_dict(brand_profile),
                 "competitor_insights": flatten_dict(competitor_insights),
                 "guidelines": flatten_dict(guidelines),
-                "final_output": flatten_dict(final_output),
                 "messages": flatten_dict(messages),
                 "user_message": user_message,
             },

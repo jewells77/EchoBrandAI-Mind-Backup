@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException
-from typing import Dict, Any, Union
+from app.api.exceptions import APIError
+from typing import Dict, Any
 
 from app.api.v1.schemas.chat import (
     UnifiedChatRequest,
-    ChatInitResponse,
     ChatContinueResponse,
 )
 from app.services.chat_service import ChatService
@@ -12,16 +12,15 @@ from app.services.chat_service import ChatService
 router = APIRouter()
 
 
-@router.post("/", response_model=Union[ChatInitResponse, ChatContinueResponse])
+@router.post("/", response_model=ChatContinueResponse)
 async def chat(
     request: UnifiedChatRequest,
-) -> Union[ChatInitResponse, ChatContinueResponse]:
+) -> ChatContinueResponse:
     """
     Unified chat endpoint.
 
     - If request.thread_id is provided, continue the conversation with the given message.
-    - Otherwise, start a new conversation requiring brand details, competitors summary,
-      guidelines, and an initial message.
+    - Otherwise, start a new conversation
     """
     try:
         chat_service = ChatService()
@@ -32,34 +31,33 @@ async def chat(
                 thread_id=request.thread_id, message=request.message
             )
 
-            if result.get("status") == "error":
-                raise HTTPException(
-                    status_code=400, detail=result.get("error", "Unknown error")
-                )
-            return ChatContinueResponse(
-                thread_id=result["thread_id"],
-                message=result.get("message", ""),
-                status=result.get("status", "completed"),
-                final_output=result.get("final_output"),
+        # New chat flow
+        else:
+            result = await chat_service.start_chat(
+                brand_details=(
+                    (request.brand_details or {}).model_dump()
+                    if request.brand_details
+                    else {}
+                ),
+                user_qurey=request.message,
+                competitors_summary=request.competitors_summary,
+                guidelines=request.guidelines,
             )
 
-        # New chat flow
-        result = await chat_service.start_chat(
-            brand_details=(
-                (request.brand_details or {}).model_dump()
-                if request.brand_details
-                else {}
-            ),
-            user_qurey=request.message,
-            competitors_summary=request.competitors_summary,
-            guidelines=request.guidelines,
-        )
+        if result.get("status") == "error":
+            raise HTTPException(
+                status_code=400, detail=result.get("error", "Unknown error")
+            )
+
         return ChatContinueResponse(
             thread_id=result["thread_id"],
             message=result.get("message", ""),
+            ai_generated_images=result.get("ai_generated_images", []),
             status=result.get("status", "completed"),
             final_output=result.get("final_output"),
         )
+    except APIError:
+        raise
     except HTTPException:
         raise
     except Exception as e:
