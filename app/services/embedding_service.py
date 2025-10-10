@@ -3,6 +3,7 @@ from app.domain.llm_providers.embedding_factory import get_embedding_provider
 from app.infrastructure.vectorstores.qdrant_store import upsert_points
 from qdrant_client.models import PointStruct
 from app.infrastructure.vectorstores.qdrant_store import validate_payload_fields
+import uuid
 
 
 class EmbeddingService:
@@ -28,8 +29,12 @@ class EmbeddingService:
         metadata_list = [{**metadata, "text": chunk} for chunk in chunks]
         embeddings = [self.embedding_provider.get_embedding(chunk) for chunk in chunks]
         points = [
-            PointStruct(id=i, vector=embedding, payload=metadata)
-            for i, (embedding, metadata) in enumerate(zip(embeddings, metadata_list), 1)
+            PointStruct(
+                id=str(uuid.uuid4()),
+                vector=embedding,
+                payload=metadata,
+            )
+            for (embedding, metadata) in zip(embeddings, metadata_list)
         ]
         upsert_points(self.collection_name, points)
         return {"chunks": chunks, "embeddings": embeddings, "metadata": metadata_list}
