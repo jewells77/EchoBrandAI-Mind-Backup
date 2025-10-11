@@ -13,7 +13,7 @@ class EmbeddingService:
         self.embedding_provider = get_embedding_provider(embedding_provider_name)
         self.collection_name = collection_name
 
-    def process_and_upsert(
+    async def process_and_upsert(
         self,
         text: str,
         chunk_size: int = 800,
@@ -36,5 +36,5 @@ class EmbeddingService:
             )
             for (embedding, metadata) in zip(embeddings, metadata_list)
         ]
-        upsert_points(self.collection_name, points)
+        await upsert_points(self.collection_name, points)
         return {"chunks": chunks, "embeddings": embeddings, "metadata": metadata_list}

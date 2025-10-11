@@ -3,6 +3,7 @@ from app.infrastructure.scraping.playwright_client import PlaywrightScraper
 from app.services.embedding_service import EmbeddingService
 from app.core.logger import get_logger
 from app.config import settings
+from app.api.exceptions import APIError
 
 import re
 
@@ -45,34 +46,31 @@ class CompetitorService:
         url: str,
         embedding_provider_name: str = "huggingface",
         user_id: str = "",
-    ) -> Dict[str, Any]:
+    ) -> None:
         """
-        Scrape competitor website, clean text, then embed and upsert, returning processed data.
-
+        Scrape competitor website, clean text, then embed and upsert, raising errors as appropriate.
         Args:
             url: Competitor URL to process
             embedding_provider_name: Which embedding provider to use (default: huggingface)
-
-        Returns:
-            Dictionary containing processed data for competitor
         """
         try:
-            # Ensure collection exists, throw error if not
-            results = {}
             collection_name = settings.QDRANT_WEBSITE_CONTENT_COLLECTION
             embedding_service = EmbeddingService(
                 embedding_provider_name, collection_name
             )
             scrape_result = await self.scrape_single_competitor(url)
+
             if scrape_result.get("status") == "success":
                 cleaned = scrape_result["text_content"]
-                embedding_service.process_and_upsert(
+                await embedding_service.process_and_upsert(
                     cleaned, metadata={"url": url, "user_id": user_id}
                 )
-                results[url] = {"status": "success", "url": url}
-            else:
-                results[url] = scrape_result
+                return  # success
+            # If scrape_result is not success, treat as error
+            error_message = (
+                scrape_result.get("message") or "Failed to process competitor website."
+            )
+            raise APIError(error_message, status_code=400)
         except Exception as e:
             logger.exception(f"Error scraping {url}")
-            raise
-        return results
+            raise APIError(f"Error scraping the URL: {str(e)}", status_code=500)
