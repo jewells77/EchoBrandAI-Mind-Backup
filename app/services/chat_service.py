@@ -112,6 +112,7 @@ class ChatService:
                 "user_qurey": message,
                 "step": "generation",
                 "status": "running",
+                "ai_generated_images": [],
             }
 
             # Run the workflow with the updated state

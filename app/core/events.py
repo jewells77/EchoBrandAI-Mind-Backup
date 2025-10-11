@@ -14,7 +14,7 @@ async def startup_event_handler(fastapi_app: FastAPI):
 
         # Qdrant
         fastapi_app.state.qdrant_client = qdrant_config.init_qdrant()
-        qdrant_store.ensure_all_collections_exist()
+        await qdrant_store.ensure_all_collections_exist()
         logger.info("Qdrant initialized successfully")
 
     except Exception as e:
