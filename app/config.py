@@ -72,6 +72,13 @@ class Settings(BaseSettings):
             return [""]
         return [origin.strip() for origin in v.split(",") if origin.strip()] or [""]
 
+    BRAND_DETAIL_GUIDE_URL: str = os.getenv(
+        "BRAND_DETAIL_GUIDE_URL", "https://www.no-url.com"
+    )
+    COMPETITOR_SITE_GUIDE_URL: str = os.getenv(
+        "COMPETITOR_SITE_GUIDE_URL", "https://www.no-url.com"
+    )
+
     class Config:
         env_file = ".env"
         case_sensitive = True

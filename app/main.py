@@ -1,3 +1,4 @@
+import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -62,7 +63,6 @@ async def root():
 
 
 if __name__ == "__main__":
-    import uvicorn
 
     # ⚠️ Note: When using Playwright for scraping, set reload=False.
     # Reason: Uvicorn's reload=True (auto-reload on code changes) interferes with

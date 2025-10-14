@@ -12,7 +12,31 @@ from app.services.chat_service import ChatService
 router = APIRouter()
 
 
-@router.post("/", response_model=ChatContinueResponse)
+@router.post(
+    "/",
+    response_model=ChatContinueResponse,
+    summary="Unified chat endpoint",
+    description="""
+- If request.thread_id is provided, continue the conversation with the given message.
+- Otherwise, start a new conversation
+- In the message, we can include the image URL as well (Azure Blob URL)
+- **Start chat:**
+```json
+{
+  \"user_id\": \"jack123\",
+  \"message\": \"Hey, can you write a 200-word Instagram post about coffee?\",
+  \"brand_details\": \"Name: EcoBrand | Description: *(none)* | Industry: Personal Care\"
+}
+```
+- **Continue chat:**
+```json
+{
+  \"thread_id\": \"chat_123\",
+  \"message\": \"Awesome! Can you make it a bit crisper?\"
+}
+```
+""",
+)
 async def chat(
     request: UnifiedChatRequest,
 ) -> ChatContinueResponse:
@@ -34,14 +58,9 @@ async def chat(
         # New chat flow
         else:
             result = await chat_service.start_chat(
-                brand_details=(
-                    (request.brand_details or {}).model_dump()
-                    if request.brand_details
-                    else {}
-                ),
+                brand_details=request.brand_details,
                 user_qurey=request.message,
-                competitors_summary=request.competitors_summary,
-                guidelines=request.guidelines,
+                user_id=request.user_id,
             )
 
         if result.get("status") == "error":

@@ -22,7 +22,7 @@ class EmbeddingService:
     ):
         metadata = metadata or {}
         # Validate what each chunk's payload will look like
-        validate_payload_fields(
+        await validate_payload_fields(
             self.collection_name, {**metadata, "text": "just for validation"}
         )
         chunks = chunk_text(text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)

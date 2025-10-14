@@ -20,8 +20,10 @@ from langgraph.graph.message import add_messages
 
 from app.domain.tools.url_extractors import extract_query_and_azure_media_links
 from app.infrastructure.db.langgraph_memory import LangGraphMemoryHandler
+from app.infrastructure.vectorstores.qdrant_store import has_data_for_user
 
 from app.domain.agents.supervisor_agent import SupervisorAgent
+from app.domain.agents.validation_agent import ValidationAgent
 from app.domain.agents.image_generation_agent import ImageGenerationAgent
 from app.domain.agents.brand_dna_analyzer import BrandDNAAnalyzerAgent
 from app.domain.agents.content_strategist import ContentStrategistAgent
@@ -32,9 +34,14 @@ from app.domain.llm_providers.base import BaseLLMProvider
 from app.infrastructure.scraping.playwright_client import PlaywrightScraper
 from app.api.v1.schemas.common import get_last_n_chats
 from app.api.exceptions import APIError
+from app.domain.agents.competitor_intelligence import CompetitorIntelligenceAgent
+from app.domain.llm_providers.embedding_factory import get_embedding_provider
+from app.infrastructure.vectorstores.qdrant_store import query_points_by_filter
 from app.config import settings
 
 import re
+
+from app.domain.tools.qdrant_helpers import extract_qdrant_texts
 
 
 # TODO: REMOVE THIS FUNCTION AFTER TESTING
@@ -86,31 +93,32 @@ class WorkflowState(TypedDict):
     """State of the content creation workflow."""
 
     messages: Annotated[List[AIMessage | HumanMessage], add_messages]
-    # next_agent: str = "" # to be used for the supervisor agent when we have more agents
     ai_generated_images: NotRequired[List[str]]
     # uploaded_images: NotRequired[List[str]]
 
     # Inputs
     brand_details: Dict[str, Any]
-    competitors_summary: NotRequired[Dict[str, Any]]  # Pre-analyzed competitor data
     user_qurey: str
-    guidelines: Dict[str, Any]  # Can be empty
+    user_id: str
 
     # Process state
     step: Literal[
         "supervisor",
-        "image_generation",
-        "brand_analysis",
-        "strategy",
-        "generation",
-        "refinement",
+        "brand_agent",
+        "competitor_agent",
+        "strategy_agent",
+        "generator_agent",
+        "refiner_agent",
+        "image_agent",
+        "validation_agent",
+        "final_output_agent",
         "end",
     ]
     status: Literal["running", "completed", "error"]
 
     # Outputs from each step
-    brand_profile: NotRequired[Dict[str, Any]]
-    competitor_insights: NotRequired[Dict[str, Any]]
+    brand_profile: NotRequired[str]
+    competitor_insights: NotRequired[str]
     content_strategy: NotRequired[Dict[str, Any]]
     content_draft: NotRequired[Dict[str, Any]]
     final_content: NotRequired[Dict[str, Any]]
@@ -118,6 +126,9 @@ class WorkflowState(TypedDict):
 
     # Error handling
     error: NotRequired[str]
+    next_agent: NotRequired[
+        str
+    ]  # <--- Add core explicit next_agent for supervisor/agent routing
 
 
 class LangGraphContentWorkflow:
@@ -132,294 +143,159 @@ class LangGraphContentWorkflow:
 
         # Initialize agents
         self.supervisor_agent = SupervisorAgent(llm)
+        self.validation_agent = ValidationAgent(llm)
         self.image_agent = ImageGenerationAgent()
         self.brand_agent = BrandDNAAnalyzerAgent(llm)
         self.strategist_agent = ContentStrategistAgent(llm)
         self.generator_agent = ContentGeneratorAgent(llm)
         self.refiner_agent = ContentRefinerAgent(llm)
         self.final_output_agent = FinalOutputAgent(llm)
-
+        self.competitor_agent = CompetitorIntelligenceAgent(llm)
         # Build the graph builder
         self.graph_builder = self._build_graph()
 
     def _build_graph(self):
-        """Build the LangGraph workflow."""
-        # Create the graph
+        """Agentic cyclic workflow with supervisor as both policy and router."""
         builder = StateGraph(WorkflowState)
 
-        # Define the nodes
+        # Define nodes
         builder.add_node("supervisor", self._supervisor_node)
-        builder.add_node("image_generation", self._image_generate)
-        builder.add_node("is_state_existing", self._is_state_existing)
-        builder.add_node("brand_analysis", self._analyze_brand)
-        builder.add_node("strategy", self._create_strategy)
-        builder.add_node("generation", self._generate_content)
-        builder.add_node("refinement", self._refine_content)
-        builder.add_node("finalize", self._finalize_output)
-
-        # Define the edges (workflow steps)
-        # Step 0: Decide route based on whether prior state-like data exists
+        builder.add_node("image_agent", self._image_node)
+        builder.add_node("validation_agent", self._validation_node)
+        builder.add_node("final_output_agent", self._final_output_node)
+        # builder.add_node("competitor_agent", self._competitor_node)
+        # Supervisor node decides next agent and stores in state
         builder.add_conditional_edges(
             "supervisor",
             self._supervisor_router,
-            {"image_generation": "image_generation", "finalize": "finalize"},
-        )
-
-        builder.add_conditional_edges(
-            "is_state_existing",
-            self._state_router,
             {
-                "supervisor": "supervisor",
-                "brand_analysis": "brand_analysis",
+                "validation_agent": "validation_agent",
+                "image_agent": "image_agent",
+                "final_output_agent": "final_output_agent",
+                "end": END,
             },
         )
 
-        builder.add_edge("brand_analysis", "strategy")
-
+        # Validation agent uses next_agent from state
         builder.add_conditional_edges(
-            "strategy", self._strategy_router, {"generation": "generation", "end": END}
+            "validation_agent",
+            lambda state: state.get("next_agent", END),
         )
 
-        builder.add_edge("generation", "refinement")
+        # Set entry point
+        builder.set_entry_point("supervisor")
 
-        builder.add_edge("refinement", "finalize")
-        builder.add_edge("finalize", END)
-        builder.add_edge("image_generation", END)
+        # Image and final nodes end workflow
+        builder.add_edge("image_agent", END)
+        builder.add_edge("final_output_agent", END)
 
-        # Set is_state_existing as the entry point to choose the path
-        builder.set_entry_point("is_state_existing")
-
-        # The graph will be compiled with the checkpointer during runtime
-        # Return the builder instead of the compiled graph
         return builder
 
-    # Node implementations
+    # --------------------
+    # Agent Nodes (stubs):
+
+    # Supervisor router reads next_agent from state
+    def _supervisor_router(self, state: WorkflowState) -> str:
+        return state.get("next_agent", END)
 
     async def _supervisor_node(self, state: WorkflowState) -> WorkflowState:
-        """Supervisor node: can update state or just mark step."""
-        return {**state, "step": "supervisor"}
+        """Supervisor decides next agent and stores in state."""
+        query = state.get("user_qurey", "")
+        next_agent = await self.supervisor_agent.decide(query)
+        return {**state, "next_agent": next_agent, "step": "supervisor"}
 
-    async def _image_generate(self, state: WorkflowState) -> WorkflowState:
+    async def _image_node(self, state: WorkflowState) -> WorkflowState:
         """Image generation node."""
-
         user_input = state["user_qurey"]
         query, image_urls = extract_query_and_azure_media_links(user_input)
         if len(image_urls) > 3:
-            raise APIError(
-                "A maximum of 3 image URLs are allowed.",
-                status_code=400,
-            )
+            raise APIError("A maximum of 3 image URLs are allowed.", status_code=400)
+
         llm_response = await self.image_agent.generate_image(
             prompt=query, image_urls=image_urls
         )
         final_output_text = llm_response.get("text", "")
         ai_generated_images = llm_response.get("images", [])
+
         return {
             **state,
             "final_output": final_output_text,
             "ai_generated_images": ai_generated_images,
             "messages": [AIMessage(content=final_output_text)],
-            "step": "end",
+            "step": "image_agent",
             "status": "completed",
+            "next_agent": "end",
         }
 
-    async def _supervisor_router(self, state: WorkflowState) -> str:
-        next_agent = await self.supervisor_agent.decide(state["user_qurey"])
-        return "image_generation" if next_agent == "image_agent" else "finalize"
-
-    async def _analyze_brand(self, state: WorkflowState) -> WorkflowState:
-        """Analyze the brand DNA."""
-        try:
-            brand_profile = await self.brand_agent.analyze(
-                state["brand_details"],
-            )
-            return {
-                **state,
-                "brand_profile": brand_profile,
-                "step": "brand_analysis",
-                "status": "completed",
-            }
-        except Exception as e:
-            return {
-                **state,
-                "step": "brand_analysis",
-                "status": "error",
-                "error": f"Brand analysis failed: {str(e)}",
-            }
-
-    async def _create_strategy(self, state: WorkflowState) -> WorkflowState:
-        """Create content strategy."""
-        # Only require brand_profile, not competitor_insights
-        if "brand_profile" not in state:
-            return {
-                **state,
-                "step": "strategy",
-                "status": "error",
-                "error": "Missing required brand_profile for strategy",
-            }
-
-        try:
-            strategy = await self.strategist_agent.suggest_strategy(
-                state["brand_profile"],
-                state.get("competitor_insights", {}),
-                state["user_qurey"],
-            )
-            return {
-                **state,
-                "content_strategy": strategy,
-                "step": "strategy",
-                "status": "completed",
-            }
-        except Exception as e:
-            return {
-                **state,
-                "step": "strategy",
-                "status": "error",
-                "error": f"Strategy creation failed: {str(e)}",
-            }
-
-    def _strategy_router(self, state: WorkflowState) -> str:
-        """Route based on strategy results."""
-        if state.get("status") == "error":
-            return "end"
-
-        strategy = state.get("content_strategy", {})
-        # Proceed if we have at least one title
-        titles = strategy.get("titles", [])
-
-        if titles:
-            return "generation"
-        else:
-            # End if we don't have necessary strategy outputs
-            return "end"
-
-    def _state_router(self, state: WorkflowState) -> str:
-        """Route to conversational flow if prior state-like data exists, else start workflow."""
-        # Heuristic: if any downstream outputs are present, treat as existing state
-        has_prior_state = any(
-            key in state and bool(state.get(key))
-            for key in (
-                "final_output",
-                "final_content",
-                "content_draft",
-                "content_strategy",
-                "competitor_insights",
-                "brand_profile",
-            )
+    async def _validation_node(self, state: WorkflowState) -> WorkflowState:
+        """Validation node decides next agent based on state."""
+        user_id = state.get("user_id")
+        collection_name = settings.QDRANT_WEBSITE_CONTENT_COLLECTION
+        is_competitor_site_data_exist = await has_data_for_user(
+            collection_name, user_id
         )
-        # return "finalize" if has_prior_state else "brand_analysis"
-        return "supervisor"
-
-    async def _is_state_existing(self, state: WorkflowState) -> WorkflowState:
-        """No-op node used before routing; returns state unchanged."""
-        return state
-
-    async def _generate_content(self, state: WorkflowState) -> WorkflowState:
-        """Generate draft content."""
-        try:
-            strategy = state["content_strategy"]
-            brand_profile = state["brand_profile"]
-
-            # Use the first title
-            theme = strategy.get("titles", [""])[0]
-
-            # Add brand tone and target audience
-            brand_tone = brand_profile.get("brand_tone", "")
-            target_audience = brand_profile.get("target_audience", "")
-
-            # Use the user_qurey to extract word count limits
-            draft = await self.generator_agent.generate_content(
-                theme,
-                user_qurey=state["user_qurey"],
-                brand_tone=brand_tone,
-                target_audience=target_audience,
-            )
-
+        is_brand_detail = True
+        user_query = state.get("user_qurey")
+        validation_result = await self.validation_agent.decide(
+            is_brand_detail=is_brand_detail,
+            is_competitor_site=is_competitor_site_data_exist,
+            user_query=user_query,
+        )
+        is_validate = validation_result["is_validate"]
+        message = validation_result["message"]
+        if not is_validate:
             return {
                 **state,
-                "content_draft": draft,
-                "step": "generation",
-                "status": "completed",
-            }
-        except Exception as e:
-            return {
-                **state,
-                "step": "generation",
-                "status": "error",
-                "error": f"Content generation failed: {str(e)}",
+                "validated_status": is_validate,
+                "final_output": message,
+                "messages": [AIMessage(content=message)],
+                "step": "validation_agent",
+                "next_agent": "end",
             }
 
-    async def _refine_content(self, state: WorkflowState) -> WorkflowState:
-        """Refine the content."""
-        try:
-            draft = state["content_draft"]
-            brand_profile = state["brand_profile"]
-            guidelines = state["guidelines"]
+        user_query = state.get("user_qurey")
+        embedding_provider = get_embedding_provider("huggingface")
+        query_vector = embedding_provider.get_embedding(user_query)
+        filter_dict = {"must": [{"key": "user_id", "match": {"value": user_id}}]}
+        results = await query_points_by_filter(
+            collection_name, vector=query_vector, top=10, filter_dict=filter_dict
+        )
+        extracted_texts = extract_qdrant_texts(results=results, limit=3)
+        competitor_insights = await self.competitor_agent.decide(extracted_texts)
+        return {
+            **state,
+            "competitor_insights": competitor_insights,
+            "step": "validation_agent",
+            "next_agent": "final_output_agent",
+        }
 
-            # Enhance guidelines with brand profile info
-            enhanced_guidelines = {**guidelines}
-            if "tone" not in enhanced_guidelines:
-                enhanced_guidelines["tone"] = brand_profile.get("brand_tone", "")
-            if "target_audience" not in enhanced_guidelines:
-                enhanced_guidelines["target_audience"] = brand_profile.get(
-                    "target_audience", ""
-                )
-            if "keywords" not in enhanced_guidelines and "keywords" in brand_profile:
-                enhanced_guidelines["keywords"] = brand_profile.get("keywords", [])
-
-            # Pass the user_qurey to extract word count limits
-            final_content = await self.refiner_agent.refine_content(
-                draft["draft"],
-                enhanced_guidelines,
-                user_qurey=state["user_qurey"],
-            )
-
-            return {
-                **state,
-                "final_content": final_content,
-                "step": "refinement",
-                "status": "completed",
-            }
-        except Exception as e:
-            return {
-                **state,
-                "step": "refinement",
-                "status": "error",
-                "error": f"Content refinement failed: {str(e)}",
-            }
-
-    async def _finalize_output(self, state: WorkflowState) -> WorkflowState:
-        """finalize output agent."""
-        user_message = state.get("user_qurey", {})
-        brand_profile = state.get("brand_profile", {})
-        competitor_insights = state.get("competitor_insights", {})
-        guidelines = state.get("guidelines", {})
+    async def _final_output_node(self, state: WorkflowState) -> WorkflowState:
+        """Final output node."""
+        user_message = state.get("user_qurey", "")
+        brand_profile = state.get("brand_profile", "")
+        competitor_insights = state.get("competitor_insights", "")
         messages = state.get("messages", [])
         last_messages = get_last_n_chats(messages, n=15)
+        if last_messages:
+            last_messages.pop()  # Remove last user message for context
 
-        # Remove last user message to keep only conversation history
-        last_messages.pop()
         llm_response = await self.final_output_agent.respond(
-            user_message,
-            brand_profile,
-            competitor_insights,
-            guidelines,
-            last_messages,
+            user_message, brand_profile, competitor_insights, last_messages
         )
         return {
             **state,
-            "final_output": llm_response,
+            "final_output": llm_response or "",
             "messages": [AIMessage(content=llm_response)],
-            "step": "end",
+            "step": "final_output_agent",
             "status": "completed",
+            "next_agent": "end",
         }
 
     async def run(
         self,
         brand_details: Dict[str, Any],
         user_qurey: str,
-        competitors_summary: Dict[str, Any] = None,
-        guidelines: Dict[str, Any] = None,
+        user_id: str = None,
         thread_id: str = None,
     ) -> Dict[str, Any]:
         """
@@ -428,28 +304,22 @@ class LangGraphContentWorkflow:
         Args:
             brand_details: Details about the brand
             user_qurey: User's content request
-            competitors_summary: Optional pre-analyzed competitor data (default: None)
-            guidelines: Optional content guidelines (default: None)
             thread_id: Optional thread ID for continuity (default: None)
+            user_id: User ID for validation
 
         Returns:
             Dict containing all results from the workflow
         """
-        # Set defaults for optional parameters
-        guidelines = guidelines or {}
+
         # Initialize the state
         initial_state: WorkflowState = {
             "brand_details": brand_details,
             "user_qurey": user_qurey,
-            "guidelines": guidelines,
+            "user_id": user_id,
             "messages": [HumanMessage(content=user_qurey)],
             "step": "brand_analysis",
             "status": "running",
         }
-
-        # Add competitors_summary if provided
-        if competitors_summary:
-            initial_state["competitors_summary"] = competitors_summary
 
         # Generate a thread ID if not provided
         thread_id = thread_id or f"content_{str(uuid.uuid4())}"

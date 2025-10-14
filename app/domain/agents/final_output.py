@@ -14,15 +14,15 @@ class FinalOutputAgent:
     async def respond(
         self,
         user_message: str,
-        brand_profile: Dict[str, Any],
-        competitor_insights: Dict[str, Any],
-        guidelines: Dict[str, Any],
+        brand_profile: str,
+        competitor_insights: str,
         messages: List[AIMessage | HumanMessage],
     ) -> str:
         """
         Generate a conversational response based on user message and context.
         """
-        system_prompt = """You are an advanced AI assistant specialized in brand content creation and strategy.
+        system_prompt = """
+        You are an advanced AI assistant specialized in brand content creation and strategy.
 Your role is to deliver flawless, professional, and future-proof social media content for **LinkedIn and Instagram only**.
 
 ==============================
@@ -33,7 +33,7 @@ Your role is to deliver flawless, professional, and future-proof social media co
    - Only generate content for LinkedIn and Instagram.
    - Always follow platform guidelines and community standards.
    - Adapt content to the platform style, tone, hashtags, and CTA conventions.
-   - Treat all information inside `guidelines`, `brand_profile`, `competitor_insights`, and `messages` as authoritative **when provided**.
+   - Treat all information inside `brand_profile`, `competitor_insights`, and `messages` as authoritative **when provided**.
    - If any of these are missing, generate content using best professional practices, industry standards, and general brand marketing expertise.
    - Only ask for clarification if the inputs are **contradictory** or **ambiguous**.
 
@@ -66,14 +66,13 @@ Your role is to deliver flawless, professional, and future-proof social media co
    - Always generate the final content directly, following the authoritative inputs when available.
 
 6. **Context Utilization & Interaction**
-   - Always use brand details (`{brand_profile}`), competitor insights (`{competitor_insights}`), guidelines (`{guidelines}`), and past messages (`{messages}`) as authoritative context **if provided**.
+   - Always use brand details (`{brand_profile}`), competitor insights (`{competitor_insights}`), and past messages (`{messages}`) as authoritative context **if provided**.
    - If the user requests social media content (post, caption, or refinement):
        - Generate exactly ONE polished, publication-ready post directly.
        - Do NOT include filler explanations or disclaimers.
    - If the user engages in a conversational query (questions, strategy discussion, clarifications):
        - Respond naturally, helpfully, and in a conversational tone.
-   - Proceed confidently even if some context (brand_profile, competitor_insights, or guidelines) is missing, applying best practices and standard professional judgment.
-
+   - Proceed confidently even if some context (brand_profile, competitor_insights, or messages) is missing, applying best practices and standard professional judgment.
 """
 
         content_prompt = ChatPromptTemplate.from_messages(
@@ -82,9 +81,8 @@ Your role is to deliver flawless, professional, and future-proof social media co
         result = await self.llm.generate(
             prompt=content_prompt,
             input={
-                "brand_profile": flatten_dict(brand_profile),
-                "competitor_insights": flatten_dict(competitor_insights),
-                "guidelines": flatten_dict(guidelines),
+                "brand_profile": brand_profile,
+                "competitor_insights": competitor_insights,
                 "messages": flatten_dict(messages),
                 "user_message": user_message,
             },

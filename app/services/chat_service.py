@@ -1,6 +1,7 @@
 from typing import Dict, Any, Optional, List
 import uuid
 
+from app.api.exceptions import APIError
 from app.domain.graphs.content_workflow import LangGraphContentWorkflow
 from app.domain.llm_providers.factory import create_llm_provider
 from app.infrastructure.db.langgraph_memory import LangGraphMemoryHandler
@@ -12,10 +13,9 @@ class ChatService:
 
     async def start_chat(
         self,
-        brand_details: Dict[str, Any],
+        brand_details: str,
         user_qurey: str = "",
-        competitors_summary: Optional[Dict[str, Any]] = None,
-        guidelines: Optional[Dict[str, Any]] = None,
+        user_id: str = None,
     ) -> Dict[str, Any]:
         """
         Start a new chat conversation with the content generation workflow.
@@ -23,8 +23,6 @@ class ChatService:
         Args:
             brand_details: Details about the brand
             user_qurey: Initial user query or brief (optional)
-            competitors_summary: Optional pre-analyzed competitor data
-            guidelines: Optional content guidelines
 
         Returns:
             Dict containing the workflow results and thread_id for continuation
@@ -38,12 +36,13 @@ class ChatService:
         # Generate a new thread ID for this conversation
         thread_id = f"chat_{str(uuid.uuid4())}"
 
+        if not user_id:
+            raise APIError("User ID is required for validation.", status_code=400)
         # Run the initial workflow
         result = await workflow.run(
             brand_details=brand_details,
             user_qurey=user_qurey,
-            competitors_summary=competitors_summary,
-            guidelines=guidelines,
+            user_id=user_id,
             thread_id=thread_id,
         )
 
