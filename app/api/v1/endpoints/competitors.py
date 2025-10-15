@@ -6,9 +6,9 @@ from app.api.v1.schemas.competitor import (
 )
 from app.services.competitor_service import CompetitorService
 from app.infrastructure.scraping.playwright_client import PlaywrightScraper
-from app.infrastructure.vectorstores.qdrant_store import delete_points_by_filter
 from app.api.exceptions import APIError
 from app.config import settings
+from app.services.competitor_service import delete_qdrant_embeddings_service
 
 
 router = APIRouter()
@@ -89,18 +89,17 @@ Example Parameters:
 async def delete_qdrant_embeddings(request: DeleteWebsiteEmbeddingsRequest):
     try:
         collection_name = settings.QDRANT_WEBSITE_CONTENT_COLLECTION
-        # Always enforce user_id as a must condition
         must_conditions = [{"key": "user_id", "match": {"value": request.user_id}}]
         if "must" in request.filter_dict:
             must_conditions.extend(request.filter_dict["must"])
-
         filter_with_user = {"must": must_conditions}
         if "should" in request.filter_dict:
             filter_with_user["should"] = request.filter_dict["should"]
         if "must_not" in request.filter_dict:
             filter_with_user["must_not"] = request.filter_dict["must_not"]
-
-        result = await delete_points_by_filter(collection_name, filter_with_user)
+        result = await delete_qdrant_embeddings_service(
+            collection_name, filter_with_user
+        )
         return {"status": "success", "result": str(result)}
     except APIError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)

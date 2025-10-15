@@ -1,8 +1,7 @@
 from app.domain.tools.text_chunker import chunk_text
 from app.domain.llm_providers.embedding_factory import get_embedding_provider
-from app.infrastructure.vectorstores.qdrant_store import upsert_points
+from app.infrastructure.vectorstores.qdrant_store import QdrantStore
 from qdrant_client.models import PointStruct
-from app.infrastructure.vectorstores.qdrant_store import validate_payload_fields
 import uuid
 
 
@@ -21,8 +20,9 @@ class EmbeddingService:
         metadata: dict = None,
     ):
         metadata = metadata or {}
+        qdrant_store = QdrantStore()
         # Validate what each chunk's payload will look like
-        await validate_payload_fields(
+        await qdrant_store.validate_payload_fields(
             self.collection_name, {**metadata, "text": "just for validation"}
         )
         chunks = chunk_text(text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
@@ -36,5 +36,5 @@ class EmbeddingService:
             )
             for (embedding, metadata) in zip(embeddings, metadata_list)
         ]
-        await upsert_points(self.collection_name, points)
+        await qdrant_store.upsert_points(self.collection_name, points)
         return {"chunks": chunks, "embeddings": embeddings, "metadata": metadata_list}

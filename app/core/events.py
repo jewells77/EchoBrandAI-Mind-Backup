@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from app.core.logger import logger
 from app.infrastructure.db import mongodb
-from app.infrastructure.vectorstores import qdrant_config, qdrant_store
+from app.infrastructure.vectorstores import qdrant_config
+from app.infrastructure.vectorstores.qdrant_store import QdrantStore
 
 
 async def startup_event_handler(fastapi_app: FastAPI):
@@ -14,6 +15,7 @@ async def startup_event_handler(fastapi_app: FastAPI):
 
         # Qdrant
         fastapi_app.state.qdrant_client = qdrant_config.init_qdrant()
+        qdrant_store = QdrantStore()
         await qdrant_store.ensure_all_collections_exist()
         logger.info("Qdrant initialized successfully")
 

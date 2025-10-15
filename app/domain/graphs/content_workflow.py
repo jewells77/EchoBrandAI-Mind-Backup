@@ -20,7 +20,7 @@ from langgraph.graph.message import add_messages
 
 from app.domain.tools.url_extractors import extract_query_and_azure_media_links
 from app.infrastructure.db.langgraph_memory import LangGraphMemoryHandler
-from app.infrastructure.vectorstores.qdrant_store import has_data_for_user
+from app.infrastructure.vectorstores.qdrant_store import QdrantStore
 
 from app.domain.agents.supervisor_agent import SupervisorAgent
 from app.domain.agents.validation_agent import ValidationAgent
@@ -36,7 +36,6 @@ from app.api.v1.schemas.common import get_last_n_chats
 from app.api.exceptions import APIError
 from app.domain.agents.competitor_intelligence import CompetitorIntelligenceAgent
 from app.domain.llm_providers.embedding_factory import get_embedding_provider
-from app.infrastructure.vectorstores.qdrant_store import query_points_by_filter
 from app.config import settings
 
 import re
@@ -140,6 +139,7 @@ class LangGraphContentWorkflow:
     def __init__(self, llm: BaseLLMProvider, scraper=None):
         self.llm = llm
         self.scraper = scraper or PlaywrightScraper()
+        self.qdrant_store = QdrantStore()
 
         # Initialize agents
         self.supervisor_agent = SupervisorAgent(llm)
@@ -231,7 +231,7 @@ class LangGraphContentWorkflow:
         """Validation node decides next agent based on state."""
         user_id = state.get("user_id")
         collection_name = settings.QDRANT_WEBSITE_CONTENT_COLLECTION
-        is_competitor_site_data_exist = await has_data_for_user(
+        is_competitor_site_data_exist = await self.qdrant_store.has_data_for_user(
             collection_name, user_id
         )
         is_brand_detail = True
@@ -257,7 +257,7 @@ class LangGraphContentWorkflow:
         embedding_provider = get_embedding_provider("huggingface")
         query_vector = embedding_provider.get_embedding(user_query)
         filter_dict = {"must": [{"key": "user_id", "match": {"value": user_id}}]}
-        results = await query_points_by_filter(
+        results = await self.qdrant_store.query_points_by_filter(
             collection_name, vector=query_vector, top=10, filter_dict=filter_dict
         )
         extracted_texts = extract_qdrant_texts(results=results, limit=3)

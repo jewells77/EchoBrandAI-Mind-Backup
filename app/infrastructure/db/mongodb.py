@@ -37,7 +37,7 @@ async def connect_to_mongo():
 
         # Verify connection is working by issuing a command
         await client.admin.command("ping")
-        logger.info(f"Connected to MongoDB at {settings.MONGODB_URI}")
+        logger.info(f"Connected to MongoDB")
         _mongo_client = client
         return client
     except ConnectionFailure as e:

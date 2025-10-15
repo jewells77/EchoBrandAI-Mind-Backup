@@ -4,6 +4,7 @@ from app.services.embedding_service import EmbeddingService
 from app.core.logger import get_logger
 from app.config import settings
 from app.api.exceptions import APIError
+from app.infrastructure.vectorstores.qdrant_store import QdrantStore
 
 import re
 
@@ -20,6 +21,7 @@ logger = get_logger(__name__)
 class CompetitorService:
     def __init__(self, scraper: PlaywrightScraper):
         self.scraper = scraper
+        self.qdrant_store = QdrantStore()
 
     async def scrape_single_competitor(self, url: str) -> Any:
         """
@@ -74,3 +76,8 @@ class CompetitorService:
         except Exception as e:
             logger.exception(f"Error scraping {url}")
             raise APIError(f"Error scraping the URL: {str(e)}", status_code=500)
+
+
+async def delete_qdrant_embeddings_service(collection_name: str, filter_dict: dict):
+    qdrant_store = QdrantStore()
+    return await qdrant_store.delete_points_by_filter(collection_name, filter_dict)
