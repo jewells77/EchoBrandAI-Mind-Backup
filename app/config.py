@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY", "")
 
     # MongoDB settings
-    MONGODB_URI: str = "mongodb://localhost:27017"
+    MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
     MONGODB_DB_NAME: str = "ecobrandai"
     MONGODB_CHECKPOINT_COLLECTION: str = "langgraph_checkpoints"
     MONGODB_WRITES_COLLECTION: str = "langgraph_writes"

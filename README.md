@@ -1,210 +1,146 @@
-# EcoBrandAI - Content Generation Platform
+# EcoBrandAI - Setup and Run
 
-A FastAPI-based platform for creators to generate and share content, leveraging LLMs and competitor analysis with a multi-agent architecture using LangChain and LangGraph.
+## Installation Steps
 
-## Features
-- 🧠 Multi-agent architecture with specialized roles:
-  - Brand DNA Analyzer Agent
-  - Competitor Intelligence Agent
-  - Content Strategist Agent
-  - Content Generator Agent
-  - Content Refiner Agent
-- 🔄 Parallel processing with LangGraph
-- 🕸️ Web scraping for competitor analysis (Playwright)
-- 🤖 Advanced LLM-powered content creation (OpenAI)
-- 📈 Structured content strategy with customizable outputs
-- 🧩 Modular, scalable, and maintainable architecture
+1. Install uv package manager:
+   ```bash
+   pip install uv
+   ```
 
-## Tech Stack
-- FastAPI
-- MongoDB
-- Pydantic
-- LangChain
-- LangGraph
-- Playwright (scraping)
-- OpenAI (LLM)
+2. Create virtual environment:
+   ```bash
+   uv venv .venv --python 3.12
+   ```
 
-## Multi-Agent Architecture
+3. Activate the environment:
+   ```bash
+   source .venv/Scripts/activate
+   ```
 
-The system uses 5 specialized agents working together:
+4. Install dependencies:
+   ```bash
+   uv sync
+   ```
 
-1. **Brand DNA Analyzer Agent**  
-   - Input: Brand details + competitor list
-   - Task: Extract brand tone, audience, positioning
-   - Output: Brand persona profile (JSON)
+5. Install Playwright browser:
+   ```bash
+   playwright install chromium
+   ```
+   
+   If you encounter errors related to Playwright or browser downloads, try running:
+   ```bash
+   playwright install
+   ```
 
-2. **Competitor Intelligence Agent**  
-   - Input: Competitor URLs
-   - Task: Scrape and analyze competitor content
-   - Output: Insights and content gap opportunities
+   **For Linux users:**
+   If you see errors about missing browser dependencies, run:
+   ```bash
+   # To install Chromium dependencies only
+   playwright install-deps chromium
+   # Or to install all browser dependencies
+   playwright install-deps
+   ```
 
-3. **Content Strategist Agent**  
-   - Input: Brand profile + competitor insights + content request
-   - Task: Develop content strategy
-   - Output: Strategy with titles, formats, angles
+## Start Command
 
-4. **Content Generator Agent**  
-   - Input: Theme and format
-   - Task: Generate draft content
-   - Output: Content draft
-
-5. **Content Refiner Agent**  
-   - Input: Draft + guidelines
-   - Task: Polish for brand consistency
-   - Output: Final content
-
-## Workflow Diagram
-
-```
-[User Input: Brand Details + Competitors + Content Request]
-        │
-        ▼
- ┌──────────────────┐
- │ Brand DNA Analyzer│
- └──────────────────┘
-        │
-        ▼
- ┌─────────────────────────┐
- │ Competitor Intelligence │───┐
- └─────────────────────────┘   │ (Parallel)
-        │                       │
-        └──────┬────────────────┘
-               ▼
- ┌─────────────────────────┐
- │ Content Strategist Agent│
- └─────────────────────────┘
-        │
-        ▼
- ┌─────────────────────────┐
- │ Content Generator Agent │
- └─────────────────────────┘
-        │
-        ▼
- ┌─────────────────────────┐
- │ Content Refiner Agent   │
- └─────────────────────────┘
-        │
-        ▼
-   [Final Content]
+Run the app:
+```bash
+uv run -m app.main
 ```
 
 ## Project Structure
 ```
 app/
-  api/                # API routes and schemas
+  api/
+    deps.py
+    errors.py
+    exceptions.py
+    router.py
     v1/
-      endpoints/      # API endpoints
-      schemas/        # Pydantic models for API
-  core/               # Core settings, logging, security
-  domain/             # Domain logic
-    agents/           # Multi-agent implementation
-    chains/           # LangChain chains
-    graphs/           # LangGraph workflows
-    llm_providers/    # LLM provider abstraction
-    tools/            # Agent tools
-  infrastructure/     # External services
-    db/               # Database (MongoDB)
-    scraping/         # Web scraping (Playwright)
-    vectorstores/     # Vector databases
-  services/           # Business logic
-  main.py             # FastAPI entrypoint
+      __init__.py
+      endpoints/
+        chat.py
+        competitors.py
+        finalized_post.py
+        health.py
+      schemas/
+        chat.py
+        common.py
+        competitor.py
+        content.py
+        creator.py
+  config.py
+  core/
+    events.py
+    logger.py
+    security.py
+  domain/
+    agents/
+      brand_dna_analyzer.py
+      competitor_intelligence.py
+      content_agent.py
+      content_generator.py
+      content_refiner.py
+      content_strategist.py
+      final_output.py
+      finalized_post_extractor.py
+      image_generation_agent.py
+      supervisor_agent.py
+      validation_agent.py
+    chains/
+      brand_analysis.py
+      competitor_analysis.py
+      content_generation.py
+    graphs/
+      base_graph.py
+      content_workflow.py
+    llm_providers/
+      base_embedding_provider.py
+      base.py
+      embedding_factory.py
+      factory.py
+      gemini_provider.py
+      hf_embedding_provider.py
+      openai_provider.py
+    tools/
+      api_fetcher.py
+      gemini_image_parser.py
+      graph_visualizer.py
+      image_downloader.py
+      qdrant_helpers.py
+      scraper.py
+      text_chunker.py
+      text_cleaner.py
+      url_extractors.py
+  infrastructure/
+    blob/
+      azure_media_uploader.py
+    db/
+      langgraph_memory.py
+      mongodb.py
+      repositories/
+        competitor_repo.py
+        content_repo.py
+    http/
+      http_client.py
+    scraping/
+      playwright_client.py
+    vectorstores/
+      qdrant_config.py
+      qdrant_store.py
+  main.py
+  services/
+    chat_service.py
+    competitor_service.py
+    embedding_service.py
+    finalized_post_service.py
+    provider_service.py
+    qdrant_service.py
 
-tests/                # Tests
+python-version
+pyproject.toml
+README.md
 requirements.txt
-.env.example         # Example env vars
+uv.lock
+.example.env
 ```
-
-## Setup and Running Instructions
-
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. Install Playwright browsers:
-   ```bash
-   playwright install chromium
-   ```
-
-3. Copy `env.example` to `.env` and fill in your secrets:
-   ```
-   OPENAI_API_KEY=your_openai_key
-   OPENAI_MODEL_NAME=gpt-4-turbo  # or your preferred model
-   ```
-
-4. Make sure MongoDB is running locally or update the MongoDB connection string in your `.env` file:
-   ```
-   MONGODB_URI=mongodb://localhost:27017  # default
-   MONGODB_DB_NAME=ecobrandai  # default
-   ```
-
-5. Run the app using one of these methods:
-
-   **Method 1 - Direct Python execution:**
-   ```bash
-   python -m app.main
-   ```
-
-   **Method 2 - Using Uvicorn (recommended for development):**
-   ```bash
-   uvicorn app.main:app --reload
-   ```
-
-6. Access the API documentation:
-   ```
-   http://localhost:8000/docs  # Swagger UI
-   http://localhost:8000/redoc  # ReDoc UI
-   ```
-
-7. Check the application is running:
-   ```
-   http://localhost:8000/  # Should display a welcome message
-   http://localhost:8000/api/health  # Should display health status
-   ```
-
-## API Usage
-
-Generate content with the multi-agent system:
-
-```python
-import requests
-
-url = "http://localhost:8000/api/v1/content/generate"
-
-# Basic request with required parameters only
-minimal_payload = {
-    "brand_details": {
-        "name": "EcoGreen Solutions",
-        "description": "Sustainable home products that reduce waste",
-        "industry": "Home Goods"
-    },
-    "content_request": "Create a blog post about reducing plastic use in kitchen"
-}
-
-# Full request with all parameters (competitors and guidelines are optional)
-full_payload = {
-    "brand_details": {
-        "name": "EcoGreen Solutions",
-        "description": "Sustainable home products that reduce waste",
-        "values": ["sustainability", "innovation", "quality"],  # Optional
-        "industry": "Home Goods",
-        "mission_statement": "Helping homes reduce waste with eco-friendly products"  # Optional
-    },
-    "competitors": [  # Optional - can be omitted
-        "https://example.com/competitor1",
-        "https://example.com/competitor2"
-    ],
-    "content_request": "Create a blog post about reducing plastic use in kitchen",
-    "guidelines": {  # Optional - can be omitted
-        "tone": "informative but friendly",
-        "target_audience": "environmentally-conscious homeowners"
-    }
-}
-
-response = requests.post(url, json=full_payload)
-print(response.json())
-```
-
-## LangGraph Implementation
-
-For parallel processing and advanced agent orchestration, the `/api/v1/content/langgraph` endpoint uses LangGraph to run the Brand DNA Analyzer and Competitor Intelligence agents in parallel before merging their outputs for the rest of the workflow.

@@ -1,0 +1,26 @@
+[project]
+name = "echobrandai-mind"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "azure-storage-blob>=12.26.0",
+    "beautifulsoup4>=4.14.2",
+    "certifi>=2025.10.5",
+    "fastapi>=0.119.0",
+    "google-genai>=1.43.0",
+    "huggingface-hub>=0.35.3",
+    "langchain>=0.3.27",
+    "langchain-openai>=0.3.35",
+    "langgraph>=0.6.10",
+    "langgraph-checkpoint-mongodb>=0.2.1",
+    "motor>=3.7.1",
+    "nest-asyncio>=1.6.0",
+    "playwright>=1.55.0",
+    "pydantic-settings>=2.11.0",
+    "pymongo>=4.15.3",
+    "qdrant-client>=1.15.1",
+    "sentence-transformers>=5.1.1",
+    "uvicorn>=0.37.0",
+]
