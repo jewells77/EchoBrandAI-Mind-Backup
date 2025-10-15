@@ -49,6 +49,8 @@ class Settings(BaseSettings):
         "AZURE_BLOB_CONNECTION_STRING", ""
     )
     AZURE_BLOB_CONTAINER: Optional[str] = os.getenv("AZURE_BLOB_CONTAINER", "")
+    AZURE_BLOB_AI_GENERATED_IMAGES_PATH: str = "ai-generated/images"
+    AZURE_BLOB_AI_GENERATED_VIDEOS_PATH: str = "ai-generated/videos"
     # Azure Blob accepted domains (comma separated string or list)
     ALLOWED_AZURE_BLOB_BASE_URLS: Union[str, list[str]] = Field(default="")
 

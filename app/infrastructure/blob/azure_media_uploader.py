@@ -28,7 +28,7 @@ class AzureBlobUploader:
     ) -> str:
         img_bytes = base64.b64decode(base64_str)
         date_str = datetime.datetime.now().strftime("%d-%m-%Y")
-        blob_name = f"{date_str}-{uuid.uuid4()}.{file_ext}"
+        blob_name = f"{settings.AZURE_BLOB_AI_GENERATED_IMAGES_PATH}/{date_str}-{uuid.uuid4()}.{file_ext}"
         blob_client = self.container_client.get_blob_client(blob_name)
 
         # Safely determine MIME type
@@ -63,7 +63,7 @@ class AzureBlobUploader:
             str: URL to the uploaded blob.
         """
         date_str = datetime.datetime.now().strftime("%d-%m-%Y")
-        blob_name = f"{date_str}-{uuid.uuid4()}.{file_ext}"
+        blob_name = f"{settings.AZURE_BLOB_AI_GENERATED_IMAGES_PATH}/{date_str}-{uuid.uuid4()}.{file_ext}"
         blob_client = self.container_client.get_blob_client(blob_name)
 
         # Safely determine MIME type
