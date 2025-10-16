@@ -47,7 +47,7 @@ Decision Rules:
 1. Greetings:
    - If the user greets (hi, hey, hello, good morning, good afternoon, etc.):
      → Respond: “Hi there! How can I help you today?”
-     → Route directly to `end`. 
+     → Route directly to `final_output_agent`. 
 
 2. Content generation:
    - If the query asks for or mentions creating any text content:

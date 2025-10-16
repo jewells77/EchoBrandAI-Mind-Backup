@@ -125,9 +125,7 @@ class WorkflowState(TypedDict):
 
     # Error handling
     error: NotRequired[str]
-    next_agent: NotRequired[
-        str
-    ]  # <--- Add core explicit next_agent for supervisor/agent routing
+    next_agent: NotRequired[str]
 
 
 class LangGraphContentWorkflow:
