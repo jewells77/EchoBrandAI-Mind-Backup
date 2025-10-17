@@ -37,12 +37,18 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: str = os.getenv("QDRANT_API_KEY", "")
     QDRANT_URL: str = os.getenv("QDRANT_URL", "")
     QDRANT_WEBSITE_CONTENT_COLLECTION: ClassVar[str] = "website-content"
+    QDRANT_BRAND_DETAIL_COLLECTION: ClassVar[str] = "brand-detail"
     QDRANT_COLLECTIONS: ClassVar[List[Dict[str, list]]] = [
         {
             "name": QDRANT_WEBSITE_CONTENT_COLLECTION,
             "required_payload": ["url", "user_id", "text"],
             "optional_payload": ["timestamp"],
-        }
+        },
+        {
+            "name": QDRANT_BRAND_DETAIL_COLLECTION,
+            "required_payload": ["user_id", "text", "source_url", "file_type"],
+            "optional_payload": ["timestamp"],
+        },
     ]
     # Azure Blob Storage settings
     AZURE_BLOB_CONNECTION_STRING: Optional[str] = os.getenv(

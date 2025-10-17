@@ -39,7 +39,7 @@ class CompetitorService:
             return {"status": "success", "url": url, "text_content": text_content}
         except Exception as e:
             logger.exception(f"Error scraping {url}")
-            raise
+            raise APIError(f"Error scraping the URL: {str(e)}", status_code=500)
 
     """Service for scraping competitor websites."""
 
@@ -80,4 +80,8 @@ class CompetitorService:
 
 async def delete_qdrant_embeddings_service(collection_name: str, filter_dict: dict):
     qdrant_store = QdrantStore()
-    return await qdrant_store.delete_points_by_filter(collection_name, filter_dict)
+    result = await qdrant_store.delete_points_by_filter(collection_name, filter_dict)
+    # Use attribute access based on Qdrant UpdateResult
+    if hasattr(result, "status") and result.status != "completed":
+        raise APIError("Failed to delete embeddings.", status_code=500)
+    return

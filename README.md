@@ -41,6 +41,31 @@
    playwright install-deps
    ```
 
+## OS-Specific Dependencies: Tesseract & PDF Processing
+https://docs.unstructured.io/open-source/concepts/models
+
+For features involving OCR (e.g., Tesseract) and PDF parsing, you must install some system dependencies.
+
+### Windows
+- Download and install Tesseract-OCR from: https://github.com/UB-Mannheim/tesseract/wiki
+- After installation, add `C:\Program Files\Tesseract-OCR` to your Windows System PATH environment variable.
+- To verify installation, open a new Command Prompt and run:
+  ```bash
+  tesseract --version
+  ```
+
+### Linux
+- Install required packages with:
+  ```bash
+  sudo apt-get install poppler-utils tesseract-ocr libmagic-dev
+  ```
+
+### Mac (Homebrew)
+- Install with:
+  ```bash
+  brew install poppler tesseract libmagic
+  ```
+
 ## Start Command
 
 Run the app:

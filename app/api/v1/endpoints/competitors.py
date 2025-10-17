@@ -51,16 +51,17 @@ async def get_competitor_insights(
             url=str(request.url), user_id=request.user_id
         )
         return {
-            "status": "success",
             "message": "Competitor website processed successfully.",
         }
 
     except APIError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
+        raise e
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error analyzing competitors: {str(e)}"
+        raise APIError(
+            str(e),
+            status_code=500,
+            public_message="Something went wrong.",
         )
 
 
@@ -97,13 +98,13 @@ async def delete_qdrant_embeddings(request: DeleteWebsiteEmbeddingsRequest):
             filter_with_user["should"] = request.filter_dict["should"]
         if "must_not" in request.filter_dict:
             filter_with_user["must_not"] = request.filter_dict["must_not"]
-        result = await delete_qdrant_embeddings_service(
-            collection_name, filter_with_user
-        )
-        return {"status": "success", "result": str(result)}
+        await delete_qdrant_embeddings_service(collection_name, filter_with_user)
+        return {"message": "Embeddings deleted successfully"}
     except APIError as e:
-        raise HTTPException(status_code=e.status_code, detail=e.message)
+        raise e
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error deleting Qdrant embeddings: {str(e)}"
+        raise APIError(
+            str(e),
+            status_code=500,
+            public_message="Something went wrong.",
         )

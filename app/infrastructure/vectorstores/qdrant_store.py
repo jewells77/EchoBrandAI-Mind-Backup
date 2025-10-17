@@ -20,6 +20,39 @@ class QdrantStore:
     def __init__(self):
         self.client = get_qdrant_client()
 
+    async def _validate_filter_fields_exist(
+        self, collection_name: str, filter_dict: dict
+    ) -> None:
+        if not filter_dict:
+            return
+        field_names = {
+            cond["key"]
+            for clause in ["must", "should", "must_not"]
+            for cond in filter_dict.get(clause, [])
+        }
+        if field_names:
+            await self.validate_fields_exist(
+                collection_name, {k: None for k in field_names}
+            )
+
+    def _build_qdrant_filter(self, filter_dict: dict):
+        """
+        Utility method to convert a filter_dict to a Qdrant Filter object.
+        """
+        if not filter_dict:
+            return None
+
+        def to_field_condition(cond):
+            return FieldCondition(key=cond["key"], match=MatchValue(**cond["match"]))
+
+        filter_kwargs = {}
+        for clause in ["must", "should", "must_not"]:
+            if clause in filter_dict:
+                filter_kwargs[clause] = [
+                    to_field_condition(c) for c in filter_dict[clause]
+                ]
+        return Filter(**filter_kwargs)
+
     async def collection_exists(self, collection_name: str) -> bool:
         return await self.client.collection_exists(collection_name=collection_name)
 
@@ -103,31 +136,10 @@ class QdrantStore:
         top: int = 5,
         filter_dict: dict = None,
     ):
+        qdrant_filter = None
         if filter_dict:
-            field_names = set()
-            for clause in ["must", "should", "must_not"]:
-                for cond in filter_dict.get(clause, []):
-                    field_names.add(cond["key"])
-            if field_names:
-                await self.validate_fields_exist(
-                    collection_name, {k: None for k in field_names}
-                )
-
-            def to_field_condition(cond):
-                return FieldCondition(
-                    key=cond["key"], match=MatchValue(**cond["match"])
-                )
-
-            filter_kwargs = {}
-            for clause in ["must", "should", "must_not"]:
-                if clause in filter_dict:
-                    filter_kwargs[clause] = [
-                        to_field_condition(c) for c in filter_dict[clause]
-                    ]
-            qdrant_filter = Filter(**filter_kwargs)
-        else:
-            qdrant_filter = None
-
+            await self._validate_filter_fields_exist(collection_name, filter_dict)
+            qdrant_filter = self._build_qdrant_filter(filter_dict)
         return await self.client.search(
             collection_name, query_vector=vector, limit=top, query_filter=qdrant_filter
         )
@@ -138,26 +150,8 @@ class QdrantStore:
         )
 
     async def delete_points_by_filter(self, collection_name: str, filter_dict: dict):
-        field_names = set()
-        for clause in ["must", "should", "must_not"]:
-            for cond in filter_dict.get(clause, []):
-                field_names.add(cond["key"])
-        if field_names:
-            await self.validate_fields_exist(
-                collection_name, {k: None for k in field_names}
-            )
-
-        def to_field_condition(cond):
-            return FieldCondition(key=cond["key"], match=MatchValue(**cond["match"]))
-
-        filter_kwargs = {}
-        for clause in ["must", "should", "must_not"]:
-            if clause in filter_dict:
-                filter_kwargs[clause] = [
-                    to_field_condition(c) for c in filter_dict[clause]
-                ]
-
-        qdrant_filter = Filter(**filter_kwargs)
+        await self._validate_filter_fields_exist(collection_name, filter_dict)
+        qdrant_filter = self._build_qdrant_filter(filter_dict)
         selector = FilterSelector(filter=qdrant_filter)
         return await self.client.delete(collection_name, points_selector=selector)
 
@@ -170,8 +164,12 @@ class QdrantStore:
             collection_name = collection["name"]
             if not await self.collection_exists(collection_name):
                 await self.create_collection(collection_name)
-                await self.create_payload_index(collection_name, "url")
-                await self.create_payload_index(collection_name, "user_id")
+                if collection_name == settings.QDRANT_WEBSITE_CONTENT_COLLECTION:
+                    await self.create_payload_index(collection_name, "url")
+                    await self.create_payload_index(collection_name, "user_id")
+                if collection_name == settings.QDRANT_BRAND_DETAIL_COLLECTION:
+                    await self.create_payload_index(collection_name, "user_id")
+                    await self.create_payload_index(collection_name, "source_url")
                 logger.info(f"Created Qdrant collection: {collection_name}")
             else:
                 logger.info(f"Qdrant collection already exists: {collection_name}")
@@ -198,3 +196,38 @@ class QdrantStore:
             collection_name=collection_name, scroll_filter=qfilter, limit=1
         )
         return len(result) > 0
+
+    async def get_items_by_filter(
+        self,
+        collection_name: str,
+        filter_dict: dict = None,
+        limit: int = 10,
+    ):
+        """
+        Retrieve up to `limit` items from `collection_name` using arbitrary payload filters.
+        filter_dict: {"must": [...], "should": [...], "must_not": [...]} where each element is a dict with 'key' and 'match'.
+        Example:
+            filter_dict = {
+                "must": [
+                    {"key": "field1", "match": {"value": "A"}},
+                    {"key": "field2", "match": {"value": "B"}},
+                ],
+                "should": [ ... ],
+                "must_not": [ ... ]
+            }
+        """
+        try:
+            qdrant_filter = None
+            if filter_dict:
+                await self._validate_filter_fields_exist(collection_name, filter_dict)
+                qdrant_filter = self._build_qdrant_filter(filter_dict)
+            result, _ = await self.client.scroll(
+                collection_name=collection_name,
+                scroll_filter=qdrant_filter,
+                limit=limit,
+            )
+            return result
+        except Exception as e:
+            raise APIError(
+                f"Failed to fetch items by dynamic filter: {e}", status_code=500
+            )
