@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings
 from typing import Optional, ClassVar, List, Dict, Union
 from dotenv import load_dotenv
 from pydantic import Field, field_validator
+from app.core.logger import logger
 
 # Load environment variables from .env file
 load_dotenv()
@@ -15,16 +16,20 @@ class Settings(BaseSettings):
     # API settings
     API_V1_PREFIX: str = "/api/v1"
     PROJECT_NAME: str = "EcoBrandAI"
-    DEBUG: bool = False
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() in ("1", "true", "yes")
 
     # LLM Provider settings
-    SHOW_WORKFLOW_GRAPH: bool = False
+    SHOW_WORKFLOW_GRAPH: bool = True
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY", "")
     OPENAI_MODEL_NAME: str = os.getenv("OPENAI_MODEL_NAME", "gpt-4-turbo")
     OPENAI_TEMPERATURE: float = 0.7
     OPENAI_MAX_TOKENS: Optional[int] = None
-    LANGCHAIN_API_KEY: Optional[str] = os.getenv("LANGCHAIN_API_KEY", "")
-    LANGCHAIN_PROJECT: Optional[str] = os.getenv("LANGCHAIN_PROJECT", "")
+    LANGSMITH_TRACING: Optional[str] = os.getenv("LANGSMITH_TRACING", "false")
+    LANGSMITH_ENDPOINT: Optional[str] = os.getenv(
+        "LANGSMITH_ENDPOINT", "https://api.smith.langchain.com"
+    )
+    LANGSMITH_API_KEY: Optional[str] = os.getenv("LANGSMITH_API_KEY", "")
+    LANGSMITH_PROJECT: Optional[str] = os.getenv("LANGSMITH_PROJECT", "")
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY", "")
 
     # MongoDB settings
@@ -123,3 +128,7 @@ def get_embedding_config(
     _model = model or settings.DEFAULT_EMBEDDING_MODEL[_provider]
     _dim = settings.EMBEDDING_DIMENSIONS[_provider][_model]
     return _provider, _model, _dim
+
+
+if settings:
+    logger.info("✅ Environment variables loaded from .env")
