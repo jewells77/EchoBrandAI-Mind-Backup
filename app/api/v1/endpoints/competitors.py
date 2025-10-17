@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from app.api.deps import get_scraper
 from app.api.v1.schemas.competitor import (
     CompetitorScrapeRequest,
@@ -40,7 +40,7 @@ async def get_competitor_insights(
     1. Gather competitive intelligence separate from content generation
     2. Pre-scrape competitor data to use in future content generation requests
 
-    Returns a simple success or raises an HTTPException on error.
+    Returns a simple success or raises an APIError on error.
     """
     try:
         # Initialize the competitor service

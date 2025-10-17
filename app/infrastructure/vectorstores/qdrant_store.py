@@ -10,14 +10,13 @@ from qdrant_client.models import (
 from app.core.logger import logger
 from app.infrastructure.vectorstores.qdrant_config import get_qdrant_client
 from app.api.exceptions import APIError
-from app.config import settings
+from app.config import get_embedding_config, settings
 
 
 class QdrantStore:
-    COLLECTION_DIM = 384
-    COLLECTION_DISTANCE = Distance.COSINE
-
-    def __init__(self):
+    def __init__(self, provider: str = None, model: str = None):
+        _provider, _model, _dim = get_embedding_config(provider=provider, model=model)
+        self.collection_dim = _dim
         self.client = get_qdrant_client()
 
     async def _validate_filter_fields_exist(
@@ -64,7 +63,7 @@ class QdrantStore:
         await self.client.create_collection(
             collection_name,
             vectors_config=VectorParams(
-                size=self.COLLECTION_DIM, distance=self.COLLECTION_DISTANCE
+                size=self.collection_dim, distance=Distance.COSINE
             ),
         )
 

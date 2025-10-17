@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from app.api.exceptions import APIError
 from app.core.logger import logger
 from app.infrastructure.db import mongodb
 from app.infrastructure.vectorstores import qdrant_config
@@ -23,7 +24,7 @@ async def startup_event_handler(fastapi_app: FastAPI):
         logger.error(f"❌ Startup failed: {e}")
         # Ensure we close MongoDB if startup fails midway
         await mongodb.close_mongo_connection(fastapi_app)
-        raise
+        raise APIError(f"Startup failed: {e}", status_code=500)
 
 
 async def shutdown_event_handler(fastapi_app: FastAPI):

@@ -124,8 +124,8 @@ app/
       base.py
       embedding_factory.py
       factory.py
+      gemini_embedding_provider.py
       gemini_provider.py
-      hf_embedding_provider.py
       openai_provider.py
     tools/
       api_fetcher.py

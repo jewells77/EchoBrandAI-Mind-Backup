@@ -87,9 +87,39 @@ class Settings(BaseSettings):
         "COMPETITOR_SITE_GUIDE_URL", "https://www.no-url.com"
     )
 
+    # Default embedding provider (key for provider mapping)
+    GOOGLE_EMBEDDING_PROVIDER: ClassVar[str] = "google"
+    DEFAULT_EMBEDDING_PROVIDER: ClassVar[str] = GOOGLE_EMBEDDING_PROVIDER
+    # Default model per provider
+    DEFAULT_EMBEDDING_MODEL: ClassVar[dict] = {
+        GOOGLE_EMBEDDING_PROVIDER: "models/gemini-embedding-001",
+        # Add more if needed
+    }
+
+    # Embedding vector dimensions for supported providers/models
+    EMBEDDING_DIMENSIONS: ClassVar[dict] = {
+        GOOGLE_EMBEDDING_PROVIDER: {
+            "models/gemini-embedding-001": 3072,
+            # Add more Google models as needed
+        },
+        # Add more providers/models here as needed
+    }
+
     class Config:
         env_file = ".env"
         case_sensitive = True
 
 
 settings = Settings()
+
+
+def get_embedding_config(
+    provider: str = None, model: str = None
+) -> tuple[str, str, int]:
+    """
+    Returns a tuple of (provider, model, dimension) using defaults, unless overridden.
+    """
+    _provider = provider or settings.DEFAULT_EMBEDDING_PROVIDER
+    _model = model or settings.DEFAULT_EMBEDDING_MODEL[_provider]
+    _dim = settings.EMBEDDING_DIMENSIONS[_provider][_model]
+    return _provider, _model, _dim

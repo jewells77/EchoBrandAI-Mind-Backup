@@ -10,7 +10,6 @@ dependencies = [
     "certifi>=2025.10.5",
     "fastapi>=0.119.0",
     "google-genai>=1.43.0",
-    "huggingface-hub>=0.35.3",
     "langchain>=0.3.27",
     "langchain-google-genai>=2.1.12",
     "langchain-openai>=0.3.35",
@@ -22,7 +21,6 @@ dependencies = [
     "pydantic-settings>=2.11.0",
     "pymongo>=4.15.3",
     "qdrant-client>=1.15.1",
-    "sentence-transformers>=5.1.1",
     "unstructured[all-docs]>=0.18.15",
     "uvicorn>=0.37.0",
 ]

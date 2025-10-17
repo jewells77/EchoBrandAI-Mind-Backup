@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
+from app.api.exceptions import APIError
 from app.api.v1.schemas.content import FinalizedPostRequest, FinalizedPostResponse
 from app.services.finalized_post_service import FinalizedPostService
 
@@ -15,6 +16,4 @@ async def get_finalized_post(request: FinalizedPostRequest) -> FinalizedPostResp
         result = await service.get_finalized_post(request.thread_id)
         return FinalizedPostResponse(platforms=result["platforms"])
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error extracting finalized post: {str(e)}"
-        )
+        raise APIError(f"Error extracting finalized post: {str(e)}", status_code=500)

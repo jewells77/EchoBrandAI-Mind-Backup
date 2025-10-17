@@ -5,20 +5,17 @@ from app.infrastructure.vectorstores.qdrant_store import QdrantStore
 from qdrant_client.models import PointStruct
 import uuid
 from azure.storage.blob import BlobClient
-from unstructured.partition.pdf import partition_pdf
 import os
 from tempfile import NamedTemporaryFile
-from app.config import settings
+from app.config import get_embedding_config, settings
 from urllib.parse import urlparse
-from app.domain.file_parsers.pdf_parser import PDFParser
 from app.domain.file_parsers.factory import get_parser_for_file
 
 
 class EmbeddingService:
-    def __init__(
-        self, embedding_provider_name: str = "huggingface", collection_name: str = ""
-    ):
-        self.embedding_provider = get_embedding_provider(embedding_provider_name)
+    def __init__(self, embedding_provider_name: str = None, collection_name: str = ""):
+        provider = get_embedding_config(provider=embedding_provider_name)[0]
+        self.embedding_provider = get_embedding_provider(provider)
         self.collection_name = collection_name
 
     async def process_and_upsert(
@@ -58,9 +55,7 @@ class EmbeddingService:
                 text, chunk_size=chunk_size, chunk_overlap=chunk_overlap
             )
         metadata_list = [{**metadata, "text": chunk} for chunk in chunks_to_use]
-        embeddings = [
-            self.embedding_provider.get_embedding(chunk) for chunk in chunks_to_use
-        ]
+        embeddings = self.embedding_provider.embed_documents(chunks_to_use)
         points = [
             PointStruct(
                 id=str(uuid.uuid4()),

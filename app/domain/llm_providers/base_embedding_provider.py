@@ -7,5 +7,9 @@ class BaseEmbeddingProvider(ABC):
     """
 
     @abstractmethod
-    def get_embedding(self, text: str) -> list:
+    def embed_query(self, text: str) -> list:
+        pass
+
+    @abstractmethod
+    def embed_documents(self, texts: list) -> list:
         pass

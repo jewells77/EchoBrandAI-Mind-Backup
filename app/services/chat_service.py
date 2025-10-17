@@ -2,6 +2,7 @@ from typing import Dict, Any, Optional, List
 import uuid
 
 from app.api.exceptions import APIError
+from app.api.v1.schemas.common import compare_message_role_count
 from app.domain.graphs.content_workflow import LangGraphContentWorkflow
 from app.domain.llm_providers.factory import create_llm_provider
 from app.infrastructure.db.langgraph_memory import LangGraphMemoryHandler
@@ -103,7 +104,15 @@ class ChatService:
                     "thread_id": thread_id,
                     "status": "error",
                 }
-
+            all_messages = current_state.values["messages"]
+            chat_history = compare_message_role_count(
+                all_messages, role="human", op=">=", threshold=80
+            )
+            if chat_history:
+                raise APIError(
+                    "Message limit exceeded for this conversation. Please start a new chat to continue.",
+                    status_code=429,  # 429 Too Many Requests
+                )
             # Create a new state with the user's message
             updated_state = {
                 **current_state.values,
@@ -126,8 +135,35 @@ class ChatService:
             return result
 
         except Exception as e:
-            return {
-                "error": f"Failed to continue conversation: {str(e)}",
-                "thread_id": thread_id,
-                "status": "error",
-            }
+            raise APIError(
+                f"Failed to continue conversation: {str(e)}", status_code=500
+            )
+
+    async def get_chat_history(self, thread_id: str) -> Dict[str, Any]:
+        """
+        Retrieve the conversation history (messages) for a given thread_id from MongoDB.
+        """
+        try:
+            llm = create_llm_provider()
+            workflow = LangGraphContentWorkflow(llm)
+            memory_saver = LangGraphMemoryHandler.get_mongodb_memory(
+                thread_id=thread_id, namespace="default"
+            )
+            config = LangGraphMemoryHandler.get_config(
+                thread_id=thread_id,
+                namespace="default",
+            )
+            compiled_workflow = workflow.graph_builder.compile(
+                checkpointer=memory_saver
+            )
+            state = await compiled_workflow.aget_state(config)
+            if not state or not state.values or "messages" not in state.values:
+                raise APIError(
+                    "No conversation found for this thread_id", status_code=404
+                )
+            messages = state.values["messages"]
+            return {"thread_id": thread_id, "messages": messages, "status": "ok"}
+        except Exception as e:
+            raise APIError(
+                f"Could not retrieve chat history: {str(e)}", status_code=500
+            )

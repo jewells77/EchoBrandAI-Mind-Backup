@@ -35,12 +35,16 @@ from app.infrastructure.scraping.playwright_client import PlaywrightScraper
 from app.api.v1.schemas.common import get_last_n_chats
 from app.api.exceptions import APIError
 from app.domain.agents.competitor_intelligence import CompetitorIntelligenceAgent
-from app.domain.llm_providers.embedding_factory import get_embedding_provider
+from app.domain.llm_providers.embedding_factory import (
+    get_embedding_provider,
+    get_embedding_config,
+)
 from app.config import settings
 
 import re
 
 from app.domain.tools.qdrant_helpers import extract_qdrant_texts
+from app.core.logger import logger
 
 
 # TODO: REMOVE THIS FUNCTION AFTER TESTING
@@ -228,14 +232,36 @@ class LangGraphContentWorkflow:
     async def _validation_node(self, state: WorkflowState) -> WorkflowState:
         """Validation node decides next agent based on state."""
         user_id = state.get("user_id")
-        collection_name = settings.QDRANT_WEBSITE_CONTENT_COLLECTION
-        is_competitor_site_data_exist = await self.qdrant_store.has_data_for_user(
-            collection_name, user_id
+        website_content_collection_name = settings.QDRANT_WEBSITE_CONTENT_COLLECTION
+        brand_detail_collection_name = settings.QDRANT_BRAND_DETAIL_COLLECTION
+
+        # Run data existence checks in parallel
+        results = await asyncio.gather(
+            self.qdrant_store.has_data_for_user(
+                website_content_collection_name, user_id
+            ),
+            self.qdrant_store.has_data_for_user(brand_detail_collection_name, user_id),
+            return_exceptions=True,
         )
-        is_brand_detail = True
+        collection_names = [
+            website_content_collection_name,
+            brand_detail_collection_name,
+        ]
+        flags = []
+        for idx, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.warning(
+                    f"[ValidationNode] has_data_for_user failed for {collection_names[idx]} "
+                    f"(user_id={user_id}): {result!r}"
+                )
+                flags.append(False)
+            else:
+                flags.append(result)
+        is_competitor_site_data_exist, is_brand_detail_data_exist = flags
+
         user_query = state.get("user_qurey")
         validation_result = await self.validation_agent.decide(
-            is_brand_detail=is_brand_detail,
+            is_brand_detail=is_brand_detail_data_exist,
             is_competitor_site=is_competitor_site_data_exist,
             user_query=user_query,
         )
@@ -252,14 +278,54 @@ class LangGraphContentWorkflow:
             }
 
         user_query = state.get("user_qurey")
-        embedding_provider = get_embedding_provider("huggingface")
-        query_vector = embedding_provider.get_embedding(user_query)
+        embedding_provider_name = get_embedding_config(provider=None)[0]
+        embedding_provider = get_embedding_provider(embedding_provider_name)
+        query_vector = embedding_provider.embed_query(user_query)
         filter_dict = {"must": [{"key": "user_id", "match": {"value": user_id}}]}
-        results = await self.qdrant_store.query_points_by_filter(
-            collection_name, vector=query_vector, top=10, filter_dict=filter_dict
+        top = 10
+
+        # Fetch website and brand detail vectors in parallel with robust error logging
+        results = await asyncio.gather(
+            self.qdrant_store.query_points_by_filter(
+                website_content_collection_name,
+                vector=query_vector,
+                top=top,
+                filter_dict=filter_dict,
+            ),
+            self.qdrant_store.query_points_by_filter(
+                brand_detail_collection_name,
+                vector=query_vector,
+                top=top,
+                filter_dict=filter_dict,
+            ),
+            return_exceptions=True,
         )
-        extracted_texts = extract_qdrant_texts(results=results, limit=3)
-        competitor_insights = await self.competitor_agent.decide(extracted_texts)
+        collection_names = [
+            website_content_collection_name,
+            brand_detail_collection_name,
+        ]
+        query_outputs = []
+        for idx, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.warning(
+                    f"[ValidationNode] query_points_by_filter failed for {collection_names[idx]} "
+                    f"(user_id={user_id}): {result!r}"
+                )
+                query_outputs.append([])
+            else:
+                query_outputs.append(result)
+        website_content_results, brand_detail_results = query_outputs
+
+        limit = 3
+        extracted_website_content_texts = extract_qdrant_texts(
+            results=website_content_results, limit=limit
+        )
+        extracted_brand_detail_texts = extract_qdrant_texts(
+            results=brand_detail_results, limit=limit
+        )
+        competitor_insights = await self.competitor_agent.decide(
+            extracted_website_content_texts
+        )
         return {
             **state,
             "competitor_insights": competitor_insights,

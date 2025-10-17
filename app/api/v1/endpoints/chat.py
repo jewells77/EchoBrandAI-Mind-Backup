@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from app.api.exceptions import APIError
 from typing import Dict, Any
 
@@ -64,9 +64,7 @@ async def chat(
             )
 
         if result.get("status") == "error":
-            raise HTTPException(
-                status_code=400, detail=result.get("error", "Unknown error")
-            )
+            raise APIError(result.get("error", "Unknown error"), status_code=400)
 
         return ChatContinueResponse(
             thread_id=result["thread_id"],
@@ -77,10 +75,8 @@ async def chat(
         )
     except APIError:
         raise
-    except HTTPException:
-        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing chat: {str(e)}")
+        raise APIError(f"Error processing chat: {str(e)}", status_code=500)
 
 
 @router.get("/history/{thread_id}", response_model=Dict[str, Any])
@@ -98,18 +94,14 @@ async def get_chat_history(thread_id: str) -> Dict[str, Any]:
         result = await chat_service.get_chat_history(thread_id)
 
         if result.get("status") == "not_found":
-            raise HTTPException(
-                status_code=404, detail=result.get("error", "Thread not found")
-            )
+            raise APIError(result.get("error", "Thread not found"), status_code=404)
         elif result.get("status") == "error":
-            raise HTTPException(
-                status_code=500, detail=result.get("error", "Unknown error")
-            )
+            raise APIError(result.get("error", "Unknown error"), status_code=500)
 
         return result
-    except HTTPException:
+
+    except APIError:
         raise
+
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error getting chat history: {str(e)}"
-        )
+        raise APIError(f"Error getting chat history: {str(e)}", status_code=500)

@@ -5,6 +5,7 @@ from app.core.logger import get_logger
 from app.config import settings
 from app.api.exceptions import APIError
 from app.infrastructure.vectorstores.qdrant_store import QdrantStore
+from app.config import get_embedding_config
 
 import re
 
@@ -46,20 +47,19 @@ class CompetitorService:
     async def process_competitor_website(
         self,
         url: str,
-        embedding_provider_name: str = "huggingface",
+        embedding_provider_name: str = None,
         user_id: str = "",
     ) -> None:
         """
         Scrape competitor website, clean text, then embed and upsert, raising errors as appropriate.
         Args:
             url: Competitor URL to process
-            embedding_provider_name: Which embedding provider to use (default: huggingface)
+            embedding_provider_name: Which embedding provider to use (default: google)
         """
         try:
+            provider = get_embedding_config(provider=embedding_provider_name)[0]
             collection_name = settings.QDRANT_WEBSITE_CONTENT_COLLECTION
-            embedding_service = EmbeddingService(
-                embedding_provider_name, collection_name
-            )
+            embedding_service = EmbeddingService(provider, collection_name)
             scrape_result = await self.scrape_single_competitor(url)
 
             if scrape_result.get("status") == "success":
