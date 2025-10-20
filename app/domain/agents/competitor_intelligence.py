@@ -60,7 +60,7 @@ Your output must be formatted in **clear Markdown** with headings and bullet poi
             ]
         )
 
-    async def decide(self, competitors_data: List[str]) -> str:
+    async def analyze(self, competitors_data: List[str]) -> str:
         prompt_vars = {
             "competitors_data": competitors_data,
         }
