@@ -26,12 +26,11 @@ from app.infrastructure.vectorstores.qdrant_store import QdrantStore
 from app.domain.agents.supervisor_agent import SupervisorAgent
 from app.domain.agents.validation_agent import ValidationAgent
 from app.domain.agents.image_generation_agent import ImageGenerationAgent
-from app.domain.agents.competitor_intelligence import CompetitorIntelligenceAgent
-from app.domain.agents.brand_dna_analyzer import BrandAnalysisAgent
+from app.domain.agents.competitor_analyzer import CompetitorIntelligenceAgent
+from app.domain.agents.brand_analyzer import BrandAnalysisAgent
 from app.domain.agents.final_output import FinalOutputAgent
 from app.domain.llm_providers.base import BaseLLMProvider
 
-from app.api.v1.schemas.common import get_last_n_chats
 from app.api.exceptions import APIError
 from app.domain.llm_providers.embedding_factory import (
     get_embedding_provider,
@@ -40,6 +39,7 @@ from app.domain.llm_providers.embedding_factory import (
 
 from app.domain.tools.qdrant_helpers import extract_qdrant_texts
 from app.core.logger import logger
+from app.domain.utils.chat_utils import get_last_n_chats
 
 # Node name constants for content workflow
 SUPERVISOR_NODE = "supervisor"

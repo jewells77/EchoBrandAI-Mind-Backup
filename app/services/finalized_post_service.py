@@ -3,7 +3,7 @@ from app.domain.llm_providers.factory import create_llm_provider
 from app.domain.agents.finalized_post_extractor import FinalizedPostExtractor
 from app.domain.graphs.content_workflow import LangGraphContentWorkflow
 from app.infrastructure.db.langgraph_memory import LangGraphMemoryHandler
-from app.api.v1.schemas.common import get_last_n_chats
+from app.domain.utils.chat_utils import get_last_n_chats
 
 
 class FinalizedPostService:
@@ -28,5 +28,5 @@ class FinalizedPostService:
                 f"No conversation history found for thread_id: {thread_id}"
             )
         messages = current_state.values["messages"]
-        conversation_history = get_last_n_chats(messages, n=15)
+        conversation_history = get_last_n_chats(messages, n=30)
         return await self.extractor.finalize_post(conversation_history)

@@ -101,12 +101,8 @@ app/
     security.py
   domain/
     agents/
-      brand_dna_analyzer.py
-      competitor_intelligence.py
-      content_agent.py
-      content_generator.py
-      content_refiner.py
-      content_strategist.py
+      brand_analyzer.py
+      competitor_analyzer.py
       final_output.py
       finalized_post_extractor.py
       image_generation_agent.py

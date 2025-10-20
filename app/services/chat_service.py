@@ -2,7 +2,7 @@ from typing import Dict, Any, Optional, List
 import uuid
 
 from app.api.exceptions import APIError
-from app.api.v1.schemas.common import compare_message_role_count
+from app.domain.utils.chat_utils import compare_message_role_count
 from app.domain.graphs.content_workflow import LangGraphContentWorkflow
 from app.domain.llm_providers.factory import create_llm_provider
 from app.infrastructure.db.langgraph_memory import LangGraphMemoryHandler

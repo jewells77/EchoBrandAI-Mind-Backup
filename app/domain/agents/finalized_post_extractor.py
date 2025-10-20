@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 from typing_extensions import TypedDict
 from langchain.prompts import ChatPromptTemplate
 from app.domain.llm_providers.base import BaseLLMProvider
-from app.api.v1.schemas.common import flatten_dict
+from app.domain.utils.chat_utils import flatten_dict
 from langchain.schema import AIMessage, HumanMessage
 
 
