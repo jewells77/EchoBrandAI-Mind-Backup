@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 
 from app.core.logger import get_logger
 from playwright.async_api import async_playwright
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 # Patch event loop for environments like Jupyter
 import nest_asyncio
@@ -63,7 +64,13 @@ class PlaywrightScraper:
                 browser = await p.chromium.launch(headless=self.headless)
                 context = await browser.new_context()
                 page = await context.new_page()
-                await page.goto(url, timeout=self.timeout, wait_until="networkidle")
+                try:
+                    await page.goto(url, timeout=self.timeout, wait_until="networkidle")
+                except PlaywrightTimeoutError:
+                    raise APIError(
+                        f"Unable to extract meaningful content from {url}. The page may require login",
+                        status_code=422,
+                    )
 
                 # Scroll page to trigger lazy-loaded content
                 await page.evaluate(
@@ -128,10 +135,15 @@ class PlaywrightScraper:
                 "meta_description": meta_description,
                 "text_content": cleaned_text,
             }
-
+        except APIError:
+            raise  # No re-wrapping for APIError exceptions
         except Exception as e:
             logger.error(f"Error scraping {url}: {str(e)}")
-            raise APIError("Error scraping the URL", status_code=500)
+            raise APIError(
+                f"Error scraping the URL: {str(e)}",
+                status_code=500,
+                public_message="Error scraping the URL",
+            )
 
     async def fetch_multiple(self, urls: List[str]) -> List[Dict[str, Any]]:
         """

@@ -38,9 +38,15 @@ class CompetitorService:
             raw_data = await self.scraper.fetch_content(url)
             text_content = raw_data.get("text_content", "")
             return {"status": "success", "url": url, "text_content": text_content}
+        except APIError:
+            raise
         except Exception as e:
-            logger.exception(f"Error scraping {url}")
-            raise APIError(f"Error scraping the URL: {str(e)}", status_code=500)
+            logger.exception(f"Error scraping {url}: {str(e)}")
+            raise APIError(
+                f"Error scraping the URL: {str(e)}",
+                status_code=500,
+                public_message="Error scraping the URL",
+            )
 
     """Service for scraping competitor websites."""
 
@@ -73,9 +79,17 @@ class CompetitorService:
                 scrape_result.get("message") or "Failed to process competitor website."
             )
             raise APIError(error_message, status_code=400)
+
+        except APIError:
+            raise
+
         except Exception as e:
-            logger.exception(f"Error scraping {url}")
-            raise APIError(f"Error scraping the URL: {str(e)}", status_code=500)
+            logger.exception(f"Error scraping {url}: {str(e)}")
+            raise APIError(
+                f"Error scraping the URL: {str(e)}",
+                status_code=500,
+                public_message="Error scraping the URL",
+            )
 
 
 async def delete_qdrant_embeddings_service(collection_name: str, filter_dict: dict):
