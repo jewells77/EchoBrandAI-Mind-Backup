@@ -1,0 +1,38 @@
+name: Deploy UAT FastAPI Backend
+
+on:
+    push:
+        branches:
+            - develop
+    workflow_dispatch:
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup SSH
+              run: |
+                  mkdir -p ~/.ssh
+                  echo "${{ secrets.SSH_KEY_UAT }}" > ~/.ssh/id_ed25519
+                  chmod 600 ~/.ssh/id_ed25519
+                  ssh-keyscan -H ${{ secrets.SSH_HOST_UAT }} >> ~/.ssh/known_hosts
+
+            - name: Deploy to server
+              run: |
+                  ssh -i ~/.ssh/id_ed25519 ${{ secrets.SSH_USER_UAT }}@${{ secrets.SSH_HOST_UAT }} << 'EOF'
+                    set -e
+                    cd /home/apiadmin/EchoBrandAI-Mind
+                    echo "Pulling latest code..."
+                    git pull origin develop
+                    echo "Installing dependencies..."
+                    source .venv/bin/activate
+                    uv sync
+                    echo "Restarting service..."
+                    sudo systemctl restart echobrandai.service
+                    echo "Checking service status..."
+                    sudo systemctl status echobrandai.service --no-pager | grep Active
+                  EOF
