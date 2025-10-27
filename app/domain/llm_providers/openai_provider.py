@@ -1,11 +1,7 @@
 import asyncio
-from typing import Any, AsyncGenerator, Dict, List, Optional, Union, Type
+from typing import Any, Dict, Optional, Type
 from pydantic import BaseModel
-
 from langchain_openai import ChatOpenAI
-from langchain.callbacks.streaming_aiter import AsyncIteratorCallbackHandler
-from langchain.schema import AIMessage, BaseMessage
-
 from app.config import settings
 from app.domain.llm_providers.base import BaseLLMProvider
 
@@ -84,40 +80,6 @@ class OpenAIProvider(BaseLLMProvider):
         chain = prompt | llm
         response = await chain.ainvoke(prompt_input)
         return response
-
-    async def stream(
-        self, messages: List[Union[Dict[str, str], BaseMessage]], **kwargs
-    ) -> AsyncGenerator[AIMessage, None]:
-        """
-        Stream a response from OpenAI based on input messages.
-
-        Args:
-            messages: List of messages in the conversation
-            **kwargs: Additional parameters to pass to the LLM
-
-        Returns:
-            AsyncGenerator[AIMessage, None]: Generator yielding chunks of the response
-        """
-        # normalized_messages = self._normalize_messages(messages)
-        normalized_messages = messages
-
-        # Set up streaming callback handler
-        callback_handler = AsyncIteratorCallbackHandler()
-
-        # Configure client for streaming
-        client = self._configure_client(
-            streaming=True, callbacks=[callback_handler], **kwargs
-        )
-
-        # Start generating in the background
-        task = asyncio.create_task(client.ainvoke(normalized_messages))
-
-        # Stream the response
-        async for chunk in callback_handler.aiter():
-            yield AIMessage(content=chunk)
-
-        # Ensure the task completes
-        await task
 
     def _configure_client(self, streaming: bool = False, **kwargs) -> ChatOpenAI:
         """

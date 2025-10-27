@@ -1,6 +1,6 @@
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.schema import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage
 from app.config import settings
 from app.domain.llm_providers.base import BaseLLMProvider
 
@@ -10,7 +10,7 @@ class GeminiProvider(BaseLLMProvider):
         self,
         model_name: str = "gemini-2.5-flash",
         api_key: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ):
         self.model_name = model_name
         self.api_key = api_key or settings.GEMINI_API_KEY

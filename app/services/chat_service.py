@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any
 import uuid
 
 from app.api.exceptions import APIError
@@ -6,7 +6,7 @@ from app.domain.utils.chat_utils import compare_message_role_count
 from app.domain.graphs.content_workflow import LangGraphContentWorkflow
 from app.domain.llm_providers.factory import create_llm_provider
 from app.infrastructure.db.langgraph_memory import LangGraphMemoryHandler
-from langchain.schema import HumanMessage
+from langchain_core.messages import HumanMessage
 
 
 class ChatService:
@@ -87,7 +87,6 @@ class ChatService:
             # Get the configuration for this thread
             config = LangGraphMemoryHandler.get_config(
                 thread_id=thread_id,
-                namespace="default",
             )
 
             # Compile the workflow with the MongoDB checkpointer
@@ -151,7 +150,6 @@ class ChatService:
             )
             config = LangGraphMemoryHandler.get_config(
                 thread_id=thread_id,
-                namespace="default",
             )
             compiled_workflow = workflow.graph_builder.compile(
                 checkpointer=memory_saver

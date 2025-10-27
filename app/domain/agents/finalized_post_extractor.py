@@ -1,9 +1,9 @@
 from typing import List, Dict, Any
 from typing_extensions import TypedDict
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from app.domain.llm_providers.base import BaseLLMProvider
 from app.domain.utils.chat_utils import flatten_dict
-from langchain.schema import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 
 class FinalizedMultiPlatformPost(TypedDict):

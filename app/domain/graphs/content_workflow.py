@@ -13,7 +13,7 @@ from typing import (
 from typing_extensions import NotRequired
 
 
-from langchain.schema import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 

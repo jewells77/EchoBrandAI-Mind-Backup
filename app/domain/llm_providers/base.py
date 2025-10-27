@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 
-from langchain.schema import AIMessage, BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 
 class BaseLLMProvider(ABC):
@@ -20,21 +20,21 @@ class BaseLLMProvider(ABC):
         """
         pass
 
-    @abstractmethod
-    async def stream(
-        self, messages: List[Union[Dict[str, str], BaseMessage]], **kwargs
-    ) -> AsyncGenerator[AIMessage, None]:
-        """
-        Stream a response from the LLM based on input messages.
+    # @abstractmethod
+    # async def stream(
+    #     self, messages: List[Union[Dict[str, str], BaseMessage]], **kwargs
+    # ) -> AsyncGenerator[AIMessage, None]:
+    #     """
+    #     Stream a response from the LLM based on input messages.
 
-        Args:
-            messages: List of messages in the conversation
-            **kwargs: Additional parameters to pass to the LLM
+    #     Args:
+    #         messages: List of messages in the conversation
+    #         **kwargs: Additional parameters to pass to the LLM
 
-        Returns:
-            AsyncGenerator[AIMessage, None]: Generator yielding chunks of the response
-        """
-        pass
+    #     Returns:
+    #         AsyncGenerator[AIMessage, None]: Generator yielding chunks of the response
+    #     """
+    #     pass
 
     @abstractmethod
     def with_structured_output(self, schema: Any, **kwargs) -> Any:
