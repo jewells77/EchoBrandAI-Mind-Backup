@@ -53,6 +53,7 @@ For features involving OCR (e.g., Tesseract) and PDF parsing, you must install s
   ```bash
   tesseract --version
   ```
+- Still facing issue then check it out `https://www.youtube.com/watch?v=PyF1Vh9040Y`
 
 ### Linux
 - Install required packages with:

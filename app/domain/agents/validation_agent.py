@@ -2,12 +2,12 @@ from typing_extensions import TypedDict
 from langchain_core.prompts import ChatPromptTemplate
 from app.domain.llm_providers.base import BaseLLMProvider
 from app.config import settings
-
+# from datetime import datetime
 
 class ValidationResult(TypedDict):
     is_validate: bool
     message: str
-
+    is_trend_needed: bool
 
 class ValidationAgent:
     def __init__(
@@ -35,13 +35,15 @@ If ANY required detail is missing (either value is False), set `is_validate` to 
 If BOTH are present (True/True), set `is_validate` to true and confirm in a friendly way that all requirements are met.
 Always output exactly and only JSON: {{{{"is_validate": bool, "message": str}}}}.
 Never explain your own reasoning—just return the result formatted for the user.
-""",
+                    """,
                 ),
                 (
                     "human",
-                    """is_brand_detail: {is_brand_detail}
-is_competitor_site: {is_competitor_site}
-user_query: {user_query}""",
+                    """
+                    is_brand_detail: {is_brand_detail}
+                    is_competitor_site: {is_competitor_site}
+                    user_query: {user_query}
+                    """,
                 ),
             ]
         )
@@ -58,5 +60,5 @@ user_query: {user_query}""",
             prompt=self.prompt,
             input=input_vars,
             output_schema=ValidationResult,
-        )
+        )   
         return result

@@ -20,6 +20,13 @@ class BaseLLMProvider(ABC):
         """
         pass
 
+    @abstractmethod
+    def create_agent(self, **kwargs) -> Any:
+        """
+        Create an agent from the LLM.
+        """
+        pass
+
     # @abstractmethod
     # async def stream(
     #     self, messages: List[Union[Dict[str, str], BaseMessage]], **kwargs
@@ -36,19 +43,19 @@ class BaseLLMProvider(ABC):
     #     """
     #     pass
 
-    @abstractmethod
-    def with_structured_output(self, schema: Any, **kwargs) -> Any:
-        """
-        Return an LLM runnable configured to produce structured output matching the given schema.
+    # @abstractmethod
+    # def with_structured_output(self, schema: Any, **kwargs) -> Any:
+    #     """
+    #     Return an LLM runnable configured to produce structured output matching the given schema.
 
-        Args:
-            schema: A TypedDict, Pydantic model, or JSON schema-compatible type
-            **kwargs: Optional overrides for the underlying client configuration
+    #     Args:
+    #         schema: A TypedDict, Pydantic model, or JSON schema-compatible type
+    #         **kwargs: Optional overrides for the underlying client configuration
 
-        Returns:
-            A runnable supporting .invoke/.ainvoke that yields the structured object
-        """
-        pass
+    #     Returns:
+    #         A runnable supporting .invoke/.ainvoke that yields the structured object
+    #     """
+    #     pass
 
     @abstractmethod
     def get_info(self) -> Dict[str, Any]:

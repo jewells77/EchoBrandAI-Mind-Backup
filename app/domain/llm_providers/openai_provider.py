@@ -1,7 +1,10 @@
-import asyncio
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, Optional, Type, List, Union, Sequence
+from langchain.agents.middleware.types import AgentMiddleware
+from langchain.agents.structured_output import ResponseFormat
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
+from langchain.agents import create_agent
+from langchain.tools import BaseTool
 from app.config import settings
 from app.domain.llm_providers.base import BaseLLMProvider
 
@@ -27,6 +30,7 @@ class OpenAIProvider(BaseLLMProvider):
             api_key: OpenAI API key
             **kwargs: Additional parameters to pass to ChatOpenAI
         """
+        self.provider = "openai"
         self.model_name = model_name
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -117,6 +121,41 @@ class OpenAIProvider(BaseLLMProvider):
         """
         client = self._configure_client(streaming=False, **kwargs)
         return client.with_structured_output(schema)
+
+    def create_agent(
+        self,
+        *,
+        tools: list[BaseTool] | None = None,
+        system_prompt: Optional[str] = None,
+        response_format: Optional[Any] = None,
+        middleware: Optional[Sequence[AgentMiddleware]] = None,
+        **kwargs,
+    ):
+        """
+        Create a LangGraph agent configured with this provider's model.
+        Args:
+            tools: List of tools/callables specific to this agent.
+            system_prompt: The agent’s role/instructions.
+            response_format: Optional structured output schema.
+        """
+        client = self._configure_client(streaming=False, **kwargs)
+        # Dynamically build arguments, excluding None values
+        agent_args = {
+            "model": client,
+            "system_prompt": system_prompt,
+        }
+
+        if tools:  # include only if non-empty
+            agent_args["tools"] = tools
+
+        if response_format is not None:
+            agent_args["response_format"] = response_format
+
+        if middleware:
+            agent_args["middleware"] = middleware
+
+        agent = create_agent(**agent_args)
+        return agent
 
     def get_info(self) -> Dict[str, Any]:
         """

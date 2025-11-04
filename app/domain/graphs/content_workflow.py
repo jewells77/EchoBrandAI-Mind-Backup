@@ -24,7 +24,9 @@ from app.infrastructure.db.langgraph_memory import LangGraphMemoryHandler
 from app.infrastructure.vectorstores.qdrant_store import QdrantStore
 
 from app.domain.agents.supervisor_agent import SupervisorAgent
+from app.domain.agents.web_insight import WebInsightAgent
 from app.domain.agents.validation_agent import ValidationAgent
+from app.domain.agents.trend_requirement_verification_agent import TrendRequirementVerificationAgent
 from app.domain.agents.image_generation_agent import ImageGenerationAgent
 from app.domain.agents.competitor_analyzer import CompetitorIntelligenceAgent
 from app.domain.agents.brand_analyzer import BrandAnalysisAgent
@@ -92,8 +94,8 @@ class WorkflowState(TypedDict):
         EXTRACTED_COMPETITOR_NODE,
         EXTRACTED_BRAND_DETAIL_NODE,
         FIND_TRENDS_NODE,
-        FINAL_OUTPUT_NODE,
-        END_NODE,
+        FINAL_OUTPUT_NODE, 
+        END_NODE, 
     ]
     status: Literal["running", "completed", "error"]
 
@@ -111,6 +113,7 @@ class WorkflowState(TypedDict):
     # next_agent can be string or list of strings. next_agent -> ["node_b", "node_c"] will be parallel execution of node_b and node_c.
     next_agent: NotRequired[Union[str, List[str]]]
     is_validate: NotRequired[bool] = False
+    is_trend_needed: NotRequired[bool] = False # Whether trend analysis is needed(will be set by validation agent on each call)
 
 
 class LangGraphContentWorkflow:
@@ -125,14 +128,16 @@ class LangGraphContentWorkflow:
 
         # Initialize agents
         self.supervisor_agent = SupervisorAgent(llm)
+        self.web_insight_agent = WebInsightAgent(llm)
         self.validation_agent = ValidationAgent(llm)
         self.image_agent = ImageGenerationAgent()
         self.brand_agent = BrandAnalysisAgent(llm)
         self.final_output_agent = FinalOutputAgent(llm)
         self.competitor_agent = CompetitorIntelligenceAgent(llm)
+        self.trend_requirement_verifier = TrendRequirementVerificationAgent(llm) # New agent initialization
         # Build the graph builder
         self.graph_builder = self._build_graph()
-
+    
     def _build_graph(self):
         """Agentic cyclic workflow with supervisor as both policy and router."""
         builder = StateGraph(WorkflowState)
@@ -157,9 +162,29 @@ class LangGraphContentWorkflow:
             },
         )
         # Parellel edges after validation agent node (Fan out edges)
-        builder.add_edge(VALIDATION_AGENT_NODE, EXTRACTED_COMPETITOR_NODE)
-        builder.add_edge(VALIDATION_AGENT_NODE, EXTRACTED_BRAND_DETAIL_NODE)
-        builder.add_edge(VALIDATION_AGENT_NODE, FIND_TRENDS_NODE)
+        # builder.add_edge(VALIDATION_AGENT_NODE, EXTRACTED_COMPETITOR_NODE)
+        # builder.add_edge(VALIDATION_AGENT_NODE, EXTRACTED_BRAND_DETAIL_NODE)
+        # builder.add_edge(VALIDATION_AGENT_NODE, FIND_TRENDS_NODE)
+        
+        builder.add_conditional_edges(
+            VALIDATION_AGENT_NODE,
+            # lambda state: (
+            #     # When validated, run all three in parallel
+            #     ["extract_competitor", "extract_brand_detail", "find_trends"]
+            #     if state.get("is_validate")
+            #     # When validation fails, end
+            #     else ["END"]
+            # )
+            
+            #Pass the method reference here(_workflow_after_validation)
+            self._workflow_after_validation,
+            {
+                "extract_competitor": EXTRACTED_COMPETITOR_NODE,
+                "extract_brand_detail": EXTRACTED_BRAND_DETAIL_NODE,
+                "find_trends": FIND_TRENDS_NODE,
+                "END": END,  # special key recognized by LangGraph
+            },
+        )
 
         builder.add_edge(EXTRACTED_COMPETITOR_NODE, FINAL_OUTPUT_NODE)
         builder.add_edge(EXTRACTED_BRAND_DETAIL_NODE, FINAL_OUTPUT_NODE)
@@ -220,9 +245,19 @@ class LangGraphContentWorkflow:
         """Validation node decides next agent based on state."""
         is_validate = state.get("is_validate")
         user_id = state.get("user_id")
+         
+        #is_trend_needed = validation_result.get("is_trend_needed", False) # Get from validation result
+        is_trend_needed = state.get("is_trend_needed") # Get from state
+        user_query = state.get("user_qurey")
+        
         website_content_collection_name = settings.QDRANT_WEBSITE_CONTENT_COLLECTION
         brand_detail_collection_name = settings.QDRANT_BRAND_DETAIL_COLLECTION
-        if not is_validate:
+        
+        if is_validate: # check if already is_validated = true from state
+            # Always run the new TrendRequirementVerificationAgent 
+            is_trend_needed = (await self.trend_requirement_verifier.verify(user_query))["is_trend_needed"] # just to get trend requirement true/false
+            
+        else:
             # Run data existence checks in parallel
             results = await asyncio.gather(
                 self.qdrant_store.has_data_for_user(
@@ -248,8 +283,8 @@ class LangGraphContentWorkflow:
                 else:
                     flags.append(result)
             is_competitor_site_data_exist, is_brand_detail_data_exist = flags
-
-            user_query = state.get("user_qurey")
+            # user_query = state.get("user_qurey")
+            is_trend_needed = (await self.trend_requirement_verifier.verify(user_query))["is_trend_needed"] # Get trend requirement
             validation_result = await self.validation_agent.decide(
                 is_brand_detail=is_brand_detail_data_exist,
                 is_competitor_site=is_competitor_site_data_exist,
@@ -265,11 +300,12 @@ class LangGraphContentWorkflow:
                     "messages": [AIMessage(content=message)],
                     "step": VALIDATION_AGENT_NODE,
                     "next_agent": END_NODE,
-                }
-
+                } 
+                 
         return {
             **state,
             "is_validate": is_validate,
+            "is_trend_needed": is_trend_needed,  # If not validated, trend analysis is needed
             "step": VALIDATION_AGENT_NODE,
             "status": "completed",
             "next_agent": [
@@ -279,6 +315,24 @@ class LangGraphContentWorkflow:
             ],
         }
 
+    def _workflow_after_validation(self, state: WorkflowState) -> Union[str, List[str]]:
+        """
+        Determines which parallel nodes to run after successful validation.
+        """
+        # 1. Check for Validation Failure (always ends the workflow)
+        if not state.get("is_validate"):
+            return "END" 
+
+        # 2. Start with the two mandatory data extraction nodes
+        next_nodes = ["extract_competitor", "extract_brand_detail"] 
+        
+        # 3. Conditionally add the expensive Trends node
+        # It only runs if the flag is True (i.e., data is needed)
+        if state.get("is_trend_needed"): # 
+            next_nodes.append("find_trends")
+            
+        return next_nodes
+                   
     async def _extracted_competitor_node(self, state: WorkflowState) -> WorkflowState:
         """Extracted competitor data."""
         user_id = state.get("user_id")
@@ -343,7 +397,7 @@ class LangGraphContentWorkflow:
     async def _find_trends(self, state: WorkflowState) -> WorkflowState:
         """Find trends node."""
         user_query = state.get("user_qurey")
-        trend_summary = "Trends found"
+        trend_summary = await self.web_insight_agent.generate_web_insight(user_query)
         return {
             "trend_summary": trend_summary,
         }
@@ -363,6 +417,7 @@ class LangGraphContentWorkflow:
             user_message=user_message,
             brand_profile=brand_profile,
             competitor_insights=competitor_insights,
+            trend_summary=trend_summary,
             messages=last_messages,
         )
         return {

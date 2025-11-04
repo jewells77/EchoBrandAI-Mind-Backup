@@ -479,6 +479,7 @@ dependencies = [
     { name = "langgraph-checkpoint-mongodb" },
     { name = "motor" },
     { name = "nest-asyncio" },
+    { name = "perplexityai" },
     { name = "playwright" },
     { name = "pydantic-settings" },
     { name = "pymongo" },
@@ -499,6 +500,7 @@ requires-dist = [
     { name = "langgraph-checkpoint-mongodb", specifier = ">=0.2.1" },
     { name = "motor", specifier = ">=3.7.1" },
     { name = "nest-asyncio", specifier = ">=1.6.0" },
+    { name = "perplexityai", specifier = ">=0.17.1" },
     { name = "playwright", specifier = ">=1.55.0" },
     { name = "pydantic-settings", specifier = ">=2.11.0" },
     { name = "pymongo", specifier = ">=4.15.3" },
@@ -2191,6 +2193,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/78/46/5223d613ac4963e1f7c07b2660fe0e9e770102ec6bda8c038400113fb215/pdfminer_six-20250506.tar.gz", hash = "sha256:b03cc8df09cf3c7aba8246deae52e0bca7ebb112a38895b5e1d4f5dd2b8ca2e7", size = 7387678 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/73/16/7a432c0101fa87457e75cb12c879e1749c5870a786525e2e0f42871d6462/pdfminer_six-20250506-py3-none-any.whl", hash = "sha256:d81ad173f62e5f841b53a8ba63af1a4a355933cfc0ffabd608e568b9193909e3", size = 5620187 },
+]
+
+[[package]]
+name = "perplexityai"
+version = "0.17.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "distro" },
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/78/e5/6425fcd66751f0556d39cf7c6db97ba5903b119279dd275c936cfb5e004d/perplexityai-0.17.1.tar.gz", hash = "sha256:e75444f3ea307a2414a44ee1f0dda15e8569e4a38b6173b95e4206c42dce338e", size = 111501 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3e/08/6a74f17ff251cd66dc3d7e870cf71b721a3ea1b5939726bdcf5eddf78cbf/perplexityai-0.17.1-py3-none-any.whl", hash = "sha256:2bce8a51d87df2f2398ef4b10e1df15baedd3d8d5f8a8868064d6e8d59b9e9e1", size = 97349 },
 ]
 
 [[package]]

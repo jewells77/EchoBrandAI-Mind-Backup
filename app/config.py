@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     # LLM Provider settings
     SHOW_WORKFLOW_GRAPH: bool = True
+    PERPLEXITY_API_KEY: Optional[str] = os.getenv("PERPLEXITY_API_KEY", "")
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY", "")
     OPENAI_MODEL_NAME: str = os.getenv("OPENAI_MODEL_NAME", "gpt-4-turbo")
     OPENAI_TEMPERATURE: float = 0.7
