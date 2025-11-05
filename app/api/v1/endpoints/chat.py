@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, status
 from app.api.exceptions import APIError
 from typing import Dict, Any
 
@@ -8,9 +8,9 @@ from app.api.v1.schemas.chat import (
 )
 from app.services.chat_service import ChatService
 
+from app.api.v1.schemas.pre_question import PreQuestionInput, PreQuestionOutput
 
 router = APIRouter()
-
 
 @router.post(
     "/",
@@ -86,6 +86,7 @@ async def get_chat_history(thread_id: str) -> Dict[str, Any]:
 
     This endpoint retrieves the current state and history of a conversation
     thread from MongoDB. Useful for debugging or understanding the current
+
     context of a conversation.
     """
     try:
@@ -105,3 +106,38 @@ async def get_chat_history(thread_id: str) -> Dict[str, Any]:
 
     except Exception as e:
         raise APIError(f"Error getting chat history: {str(e)}", status_code=500)
+
+
+@router.post(
+    "/pre-questions",
+    response_model=PreQuestionOutput,
+    status_code=status.HTTP_200_OK,
+    summary="To generate 3 personalized pre-chat questions based on brand details.",
+    description="""
+Accepts a JSON object with the 'brand_details' key and generates three creator-style questions.
+To get questions(example body):
+```json
+{
+    \"brand_details\": \"Name: EcoBrand | Description: *(none)* | Industry: Personal Care\"
+}
+```
+""",
+)
+async def generate_pre_questions(
+    # FastAPI handles the validation of the JSON body against this schema
+    input_data: PreQuestionInput,
+    
+) -> PreQuestionOutput:
+    
+    try:
+        # Instantiate the main chat service
+        service = ChatService()
+        
+        # Call the new method on the chat service
+        questions = await service.generate_questions(brand_details=input_data.brand_details)
+        
+        return questions
+    except APIError:
+        raise
+    except Exception as e:
+        raise APIError(f"Error generating pre-questions: {str(e)}", status_code=500)

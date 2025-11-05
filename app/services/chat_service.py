@@ -8,6 +8,8 @@ from app.domain.llm_providers.factory import create_llm_provider
 from app.infrastructure.db.langgraph_memory import LangGraphMemoryHandler
 from langchain_core.messages import HumanMessage
 
+from app.domain.agents.pre_question_agent import PreQuestionAgent
+from app.api.v1.schemas.pre_question import PreQuestionOutput
 
 class ChatService:
     """Service for handling chat-based conversations using LangGraph workflows."""
@@ -48,6 +50,33 @@ class ChatService:
         )
 
         return result
+
+    async def generate_questions(self, brand_details: str) -> PreQuestionOutput:
+        """
+        Calls the PreQuestionAgent to fetch live insights and generate the three questions.
+        
+        Args:
+            brand_details (str): The raw brand detail string.
+            
+        Returns:
+            PreQuestionOutput: A Pydantic model wrapping the list of three questions.
+        """
+        try:
+            # Create LLM provider (following the pattern of start_chat)
+            llm = create_llm_provider()
+            
+            # Initialize the agent
+            agent = PreQuestionAgent(llm=llm)
+            
+            # The agent's generate method returns a list[str]
+            questions_list = await agent.generate(brand_details=brand_details)
+
+            # Map the list of strings into the defined Pydantic output model
+            return PreQuestionOutput(questions=questions_list)
+        except Exception as e:
+            raise APIError(
+                f"Failed to generate pre-questions: {str(e)}", status_code=500
+            )
 
     async def continue_chat(
         self,
